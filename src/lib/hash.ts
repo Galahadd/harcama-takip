@@ -7,6 +7,7 @@ export function sha256(value: string) {
 export function expenseHash(input: {
   month: number;
   year: number;
+  bank?: string;
   date: string;
   description: string;
   amount: number;
@@ -15,6 +16,7 @@ export function expenseHash(input: {
     [
       input.year,
       input.month,
+      input.bank ?? "",
       input.date,
       input.description.trim().toLocaleUpperCase("tr-TR"),
       input.amount.toFixed(2),

@@ -1,8 +1,19 @@
 import postgres from "postgres";
-import type { Bank, CategoryRule, Expense, MonthOption } from "./types";
+import type {
+  ActiveInstallment,
+  Bank,
+  CategoryRule,
+  Expense,
+  FutureInstallment,
+  GoldEntry,
+  InstallmentSummary,
+  MonthOption,
+  MonthlyInstallmentTotal,
+} from "./types";
 
 let client: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
+let schemaPromise: Promise<void> | null = null;
 
 function getDatabaseUrl() {
   return (
@@ -35,6 +46,19 @@ export async function ensureSchema() {
     return;
   }
 
+  if (schemaPromise) {
+    await schemaPromise;
+    return;
+  }
+
+  schemaPromise = prepareSchema().catch((error) => {
+    schemaPromise = null;
+    throw error;
+  });
+  await schemaPromise;
+}
+
+async function prepareSchema() {
   const db = sql();
   await db`create extension if not exists pgcrypto`;
   await db`
@@ -80,11 +104,29 @@ export async function ensureSchema() {
   `;
   await db`alter table statements add column if not exists bank text not null default 'unknown'`;
   await db`alter table expenses add column if not exists bank text not null default 'unknown'`;
+  await db`alter table expenses add column if not exists installment_current integer`;
+  await db`alter table expenses add column if not exists installment_total integer`;
+  await db`alter table expenses add column if not exists installment_original_amount numeric(12,2)`;
+  await db`
+    create table if not exists gold_entries (
+      id uuid primary key default gen_random_uuid(),
+      month integer not null check (month between 1 and 12),
+      year integer not null check (year between 2000 and 2100),
+      grams numeric(10,4) not null check (grams > 0),
+      price_per_gram numeric(12,2),
+      note text,
+      created_at timestamptz not null default now(),
+      unique(month, year)
+    )
+  `;
+  await db`alter table gold_entries add column if not exists price_per_gram numeric(12,2)`;
 
   schemaReady = true;
+  schemaPromise = null;
 }
 
 function mapExpense(row: Record<string, unknown>): Expense {
+  const projected = Boolean(row.projected);
   return {
     id: String(row.id),
     statementId: row.statement_id ? String(row.statement_id) : null,
@@ -92,8 +134,13 @@ function mapExpense(row: Record<string, unknown>): Expense {
     description: String(row.description),
     amount: Number(row.amount),
     category: String(row.category),
-    source: row.source === "manual" ? "manual" : "pdf",
+    source: projected ? "projected" : row.source === "manual" ? "manual" : "pdf",
     bank: String(row.bank || "unknown") as Bank,
+    installmentCurrent: row.installment_current === null ? null : Number(row.installment_current),
+    installmentTotal: row.installment_total === null ? null : Number(row.installment_total),
+    installmentOriginalAmount:
+      row.installment_original_amount === null ? null : Number(row.installment_original_amount),
+    projected,
     createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
@@ -120,12 +167,134 @@ export async function upsertRule(pattern: string, category: string) {
 export async function listMonthOptions(): Promise<MonthOption[]> {
   await ensureSchema();
   const rows = await sql()<MonthOption[]>`
-    select distinct extract(month from expense_date)::int as month,
-           extract(year from expense_date)::int as year
-    from expenses
+    select distinct month, year
+    from (
+      select statements.month, statements.year
+      from expenses
+      join statements on statements.id = expenses.statement_id
+      where expenses.source = 'pdf'
+
+      union
+
+      select extract(month from expense_date)::int as month,
+             extract(year from expense_date)::int as year
+      from expenses
+      where source = 'manual'
+
+      union
+
+      select ((projected_index % 12) + 1)::int as month,
+             floor(projected_index / 12)::int as year
+      from (
+        select (
+          statements.year * 12
+          + statements.month
+          - 1
+          + (installment_number - expenses.installment_current)
+        )::int as projected_index
+        from expenses
+        join statements on statements.id = expenses.statement_id
+        cross join lateral generate_series(
+          expenses.installment_current + 1,
+          expenses.installment_total
+        ) as series(installment_number)
+        where expenses.source = 'pdf'
+          and expenses.installment_current is not null
+          and expenses.installment_total is not null
+          and expenses.installment_total > expenses.installment_current
+      ) projected_months
+    ) months
     order by year desc, month desc
   `;
   return rows;
+}
+
+async function listProjectedInstallmentRowsForMonth(month: number, year: number, bank?: string) {
+  const targetIndex = monthIndex(month, year);
+  const rows =
+    bank && bank !== "all"
+      ? await sql()`
+          select expenses.*, statements.month as statement_month, statements.year as statement_year
+          from expenses
+          join statements on statements.id = expenses.statement_id
+          where expenses.source = 'pdf'
+            and expenses.installment_current is not null
+            and expenses.installment_total is not null
+            and expenses.installment_total > expenses.installment_current
+            and (${targetIndex} - (statements.year * 12 + statements.month - 1)) between 1 and (expenses.installment_total - expenses.installment_current)
+            and expenses.bank = ${bank}
+        `
+      : await sql()`
+          select expenses.*, statements.month as statement_month, statements.year as statement_year
+          from expenses
+          join statements on statements.id = expenses.statement_id
+          where expenses.source = 'pdf'
+            and expenses.installment_current is not null
+            and expenses.installment_total is not null
+            and expenses.installment_total > expenses.installment_current
+            and (${targetIndex} - (statements.year * 12 + statements.month - 1)) between 1 and (expenses.installment_total - expenses.installment_current)
+        `;
+
+  return rows;
+}
+
+async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex: number, bank?: string) {
+  const rows =
+    bank && bank !== "all"
+      ? await sql()`
+          select expenses.*, statements.month as statement_month, statements.year as statement_year
+          from expenses
+          join statements on statements.id = expenses.statement_id
+          where expenses.source = 'pdf'
+            and expenses.installment_current is not null
+            and expenses.installment_total is not null
+            and expenses.installment_total > expenses.installment_current
+            and (statements.year * 12 + statements.month) <= ${endIndex}
+            and ((statements.year * 12 + statements.month - 1) + (expenses.installment_total - expenses.installment_current)) >= ${startIndex}
+            and expenses.bank = ${bank}
+        `
+      : await sql()`
+          select expenses.*, statements.month as statement_month, statements.year as statement_year
+          from expenses
+          join statements on statements.id = expenses.statement_id
+          where expenses.source = 'pdf'
+            and expenses.installment_current is not null
+            and expenses.installment_total is not null
+            and expenses.installment_total > expenses.installment_current
+            and (statements.year * 12 + statements.month) <= ${endIndex}
+            and ((statements.year * 12 + statements.month - 1) + (expenses.installment_total - expenses.installment_current)) >= ${startIndex}
+        `;
+
+  return rows;
+}
+
+async function listProjectedExpensesForMonth(month: number, year: number, bank?: string) {
+  const rows = await listProjectedInstallmentRowsForMonth(month, year, bank);
+  const projectedRows: Record<string, unknown>[] = [];
+
+  for (const row of rows) {
+    const current = Number(row.installment_current);
+    const total = Number(row.installment_total);
+    const statementMonth = Number(row.statement_month);
+    const statementYear = Number(row.statement_year);
+
+    const installmentNumber = current + (monthIndex(month, year) - monthIndex(statementMonth, statementYear));
+
+    if (installmentNumber <= current || installmentNumber > total) {
+      continue;
+    }
+
+    projectedRows.push({
+      ...row,
+      id: `${row.id}-projected-${installmentNumber}`,
+      expense_date: `${year}-${String(month).padStart(2, "0")}-01`,
+      source: "projected",
+      installment_current: installmentNumber,
+      projected: true,
+    });
+  }
+
+  return projectedRows.map(mapExpense);
 }
 
 export async function listExpenses(month: number, year: number, bank?: string) {
@@ -133,21 +302,193 @@ export async function listExpenses(month: number, year: number, bank?: string) {
   const rows =
     bank && bank !== "all"
       ? await sql()`
-          select *
+          select expenses.*
           from expenses
-          where extract(month from expense_date)::int = ${month}
-            and extract(year from expense_date)::int = ${year}
-            and bank = ${bank}
-          order by expense_date desc, created_at desc
+          left join statements on statements.id = expenses.statement_id
+          where (
+              (expenses.source = 'manual'
+                and extract(month from expenses.expense_date)::int = ${month}
+                and extract(year from expenses.expense_date)::int = ${year})
+              or
+              (expenses.source = 'pdf'
+                and statements.month = ${month}
+                and statements.year = ${year})
+            )
+            and expenses.bank = ${bank}
+          order by expenses.expense_date desc, expenses.created_at desc
         `
       : await sql()`
-          select *
+          select expenses.*
           from expenses
-          where extract(month from expense_date)::int = ${month}
-            and extract(year from expense_date)::int = ${year}
-          order by expense_date desc, created_at desc
+          left join statements on statements.id = expenses.statement_id
+          where (
+              (expenses.source = 'manual'
+                and extract(month from expenses.expense_date)::int = ${month}
+                and extract(year from expenses.expense_date)::int = ${year})
+              or
+              (expenses.source = 'pdf'
+                and statements.month = ${month}
+                and statements.year = ${year})
+            )
+          order by expenses.expense_date desc, expenses.created_at desc
         `;
-  return rows.map(mapExpense);
+  const expenses = rows.map(mapExpense);
+  const projectedExpenses = await listProjectedExpensesForMonth(month, year, bank);
+  return [...expenses, ...projectedExpenses].sort((a, b) => {
+    const dateDiff = b.date.localeCompare(a.date);
+    return dateDiff || b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
+function addMonths(month: number, year: number, offset: number) {
+  const zeroBased = month - 1 + offset;
+  return {
+    month: (zeroBased % 12) + 1,
+    year: year + Math.floor(zeroBased / 12),
+  };
+}
+
+function monthIndex(month: number, year: number) {
+  return year * 12 + month - 1;
+}
+
+export async function listFutureInstallments(
+  month: number,
+  year: number,
+  bank?: string,
+): Promise<FutureInstallment[]> {
+  await ensureSchema();
+  const startIndex = monthIndex(month, year);
+  const endIndex = startIndex + 12;
+  const rows = await listProjectedInstallmentRowsForRange(startIndex, endIndex, bank);
+  const future: FutureInstallment[] = [];
+
+  for (const row of rows) {
+    const current = Number(row.installment_current);
+    const total = Number(row.installment_total);
+    const statementMonth = Number(row.statement_month);
+    const statementYear = Number(row.statement_year);
+
+    for (let installmentNumber = current + 1; installmentNumber <= total; installmentNumber += 1) {
+      const projected = addMonths(statementMonth, statementYear, installmentNumber - current);
+      const projectedIndex = monthIndex(projected.month, projected.year);
+      if (projectedIndex < startIndex || projectedIndex > endIndex) {
+        continue;
+      }
+
+      future.push({
+        id: `${row.id}-${installmentNumber}`,
+        description: String(row.description),
+        amount: Number(row.amount),
+        category: String(row.category),
+        bank: String(row.bank || "unknown") as Bank,
+        month: projected.month,
+        year: projected.year,
+        installmentNumber,
+        installmentTotal: total,
+      });
+    }
+  }
+
+  return future.sort((a, b) => {
+    const dateDiff = monthIndex(a.month, a.year) - monthIndex(b.month, b.year);
+    return dateDiff || a.description.localeCompare(b.description, "tr");
+  });
+}
+
+export async function listInstallmentSummary(
+  month: number,
+  year: number,
+  bank?: string,
+): Promise<InstallmentSummary> {
+  await ensureSchema();
+  const startIndex = monthIndex(month, year);
+  const endIndex = startIndex + 11;
+  const rows = await listProjectedInstallmentRowsForRange(startIndex, endIndex, bank);
+
+  const activeById = new Map<string, ActiveInstallment>();
+  const monthlyByKey = new Map<string, MonthlyInstallmentTotal>();
+  const bankTotals = new Map<Bank, number>();
+
+  for (const row of rows) {
+    const id = String(row.id);
+    const current = Number(row.installment_current);
+    const total = Number(row.installment_total);
+    const amount = Number(row.amount);
+    const statementMonth = Number(row.statement_month);
+    const statementYear = Number(row.statement_year);
+    const rowBank = String(row.bank || "unknown") as Bank;
+    const remainingInstallments = total - current;
+    const last = addMonths(statementMonth, statementYear, remainingInstallments);
+
+    if (!activeById.has(id)) {
+      activeById.set(id, {
+        id,
+        description: String(row.description),
+        amount,
+        category: String(row.category),
+        bank: rowBank,
+        currentInstallment: current,
+        totalInstallments: total,
+        remainingInstallments,
+        remainingTotal: amount * remainingInstallments,
+        lastMonth: last.month,
+        lastYear: last.year,
+      });
+      bankTotals.set(rowBank, (bankTotals.get(rowBank) || 0) + amount * remainingInstallments);
+    }
+
+    for (let installmentNumber = current + 1; installmentNumber <= total; installmentNumber += 1) {
+      const projected = addMonths(statementMonth, statementYear, installmentNumber - current);
+      const projectedIndex = monthIndex(projected.month, projected.year);
+      if (projectedIndex < startIndex || projectedIndex > endIndex) {
+        continue;
+      }
+
+      const key = `${projected.year}-${projected.month}`;
+      const monthly = monthlyByKey.get(key) ?? {
+        month: projected.month,
+        year: projected.year,
+        total: 0,
+        count: 0,
+        bankTotals: [],
+      };
+      monthly.total += amount;
+      monthly.count += 1;
+
+      const bankTotal = monthly.bankTotals.find((item) => item.bank === rowBank);
+      if (bankTotal) {
+        bankTotal.total += amount;
+      } else {
+        monthly.bankTotals.push({ bank: rowBank, total: amount });
+      }
+
+      monthlyByKey.set(key, monthly);
+    }
+  }
+
+  const monthlyInstallmentTotals = [...monthlyByKey.values()]
+    .map((item) => ({
+      ...item,
+      bankTotals: item.bankTotals.sort((a, b) => b.total - a.total),
+    }))
+    .sort((a, b) => monthIndex(a.month, a.year) - monthIndex(b.month, b.year));
+
+  const nextMonth = addMonths(month, year, 1);
+  const nextMonthTotal =
+    monthlyInstallmentTotals.find((item) => item.month === nextMonth.month && item.year === nextMonth.year)?.total ?? 0;
+  const maxMonthlyTotal = monthlyInstallmentTotals.reduce((max, item) => Math.max(max, item.total), 0);
+
+  return {
+    activeInstallments: [...activeById.values()].sort((a, b) => b.remainingTotal - a.remainingTotal),
+    monthlyInstallmentTotals,
+    bankTotals: [...bankTotals.entries()]
+      .map(([bankKey, total]) => ({ bank: bankKey, total }))
+      .sort((a, b) => b.total - a.total),
+    remainingTotal: [...activeById.values()].reduce((sum, item) => sum + item.remainingTotal, 0),
+    nextMonthTotal,
+    maxMonthlyTotal,
+  };
 }
 
 export async function createManualExpense(input: {
@@ -204,15 +545,39 @@ export async function deleteMonthExpenses(input: { month: number; year: number; 
     input.bank && input.bank !== "all"
       ? await sql()`
           delete from expenses
-          where extract(month from expense_date)::int = ${input.month}
-            and extract(year from expense_date)::int = ${input.year}
-            and bank = ${input.bank}
+          where (
+              (expenses.source = 'manual'
+                and extract(month from expenses.expense_date)::int = ${input.month}
+                and extract(year from expenses.expense_date)::int = ${input.year})
+              or
+              (expenses.source = 'pdf'
+                and exists (
+                  select 1
+                  from statements
+                  where statements.id = expenses.statement_id
+                    and statements.month = ${input.month}
+                    and statements.year = ${input.year}
+                ))
+            )
+            and expenses.bank = ${input.bank}
           returning id
         `
       : await sql()`
           delete from expenses
-          where extract(month from expense_date)::int = ${input.month}
-            and extract(year from expense_date)::int = ${input.year}
+          where (
+              (expenses.source = 'manual'
+                and extract(month from expenses.expense_date)::int = ${input.month}
+                and extract(year from expenses.expense_date)::int = ${input.year})
+              or
+              (expenses.source = 'pdf'
+                and exists (
+                  select 1
+                  from statements
+                  where statements.id = expenses.statement_id
+                    and statements.month = ${input.month}
+                    and statements.year = ${input.year}
+                ))
+            )
           returning id
         `;
   return rows.length;
@@ -231,6 +596,9 @@ export async function importStatement(input: {
     amount: number;
     category: string;
     duplicateHash: string;
+    installmentCurrent?: number | null;
+    installmentTotal?: number | null;
+    installmentOriginalAmount?: number | null;
   }>;
 }) {
   await ensureSchema();
@@ -268,7 +636,8 @@ export async function importStatement(input: {
     for (const expense of input.expenses) {
       const rows = await tx`
         insert into expenses (
-          statement_id, expense_date, description, amount, category, source, bank, duplicate_hash
+          statement_id, expense_date, description, amount, category, source, bank,
+          installment_current, installment_total, installment_original_amount, duplicate_hash
         )
         values (
           ${statementId},
@@ -278,6 +647,9 @@ export async function importStatement(input: {
           ${expense.category},
           'pdf',
           ${input.bank},
+          ${expense.installmentCurrent ?? null},
+          ${expense.installmentTotal ?? null},
+          ${expense.installmentOriginalAmount ?? null},
           ${expense.duplicateHash}
         )
         on conflict (duplicate_hash) do nothing
@@ -288,4 +660,49 @@ export async function importStatement(input: {
 
     return { statementId, inserted };
   });
+}
+
+function mapGoldEntry(row: Record<string, unknown>): GoldEntry {
+  return {
+    id: String(row.id),
+    month: Number(row.month),
+    year: Number(row.year),
+    grams: Number(row.grams),
+    pricePerGram: row.price_per_gram !== null && row.price_per_gram !== undefined ? Number(row.price_per_gram) : null,
+    note: row.note ? String(row.note) : null,
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  };
+}
+
+export async function listGoldEntries(): Promise<GoldEntry[]> {
+  await ensureSchema();
+  const rows = await sql()`
+    select * from gold_entries order by year desc, month desc
+  `;
+  return rows.map(mapGoldEntry);
+}
+
+export async function upsertGoldEntry(input: {
+  month: number;
+  year: number;
+  grams: number;
+  pricePerGram?: number | null;
+  note?: string | null;
+}): Promise<GoldEntry> {
+  await ensureSchema();
+  const rows = await sql()`
+    insert into gold_entries (month, year, grams, price_per_gram, note)
+    values (${input.month}, ${input.year}, ${input.grams}, ${input.pricePerGram ?? null}, ${input.note ?? null})
+    on conflict (month, year) do update
+      set grams = excluded.grams,
+          price_per_gram = excluded.price_per_gram,
+          note = excluded.note
+    returning *
+  `;
+  return mapGoldEntry(rows[0]);
+}
+
+export async function deleteGoldEntry(id: string): Promise<void> {
+  await ensureSchema();
+  await sql()`delete from gold_entries where id = ${id}`;
 }

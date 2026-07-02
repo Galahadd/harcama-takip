@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       duplicateHash: expenseHash({
         month: date.getMonth() + 1,
         year: date.getFullYear(),
+        bank: "manual",
         date: body.date,
         description: body.description,
         amount: Number(body.amount),

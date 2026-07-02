@@ -1,7 +1,8 @@
 import pdf from "pdf-parse";
 import { categorizeDescription } from "./categorize";
 import { normalizeText, parseTurkishAmount, toIsoDate } from "./format";
-import type { CategoryRule, ParsedExpense } from "./types";
+import { parseInstallmentInfo } from "./installments";
+import type { Bank, CategoryRule, ParsedExpense } from "./types";
 
 const dateAtStartPattern = /^(\d{2})[./-](\d{2})[./-](\d{4})(.*)$/;
 const signedAmountPattern = /([+-]?\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:TL|TRY)?/gi;
@@ -33,6 +34,7 @@ function cleanDescription(description: string) {
     .replace(/\b\d+(?:[.,]\d{2})?\s*TL'?lik işlemin(?:\s*\d+\/\d+\s*taksidi)?/gi, " ")
     .replace(/\d{1,3}(?:\.\d{3})*,\d{2}\s*TL\/\d+/gi, " ")
     .replace(/\d+\/\d+\s*taksidi/gi, " ")
+    .replace(/\(\s*\d+\s*\/\s*\d+\s*\)/g, " ")
     .replace(/\b(Market|Ulaşım|Ulasim|Akaryakıt|Akaryakit|Elektronik|Diğer|Diger)\d{1,3},\d{2}/gi, " ")
     .replace(/[+-]\s*$/g, " ")
     .replace(/\s+/g, " ")
@@ -161,7 +163,7 @@ function buildParsedExpense(input: {
   group: string;
   rules: Pick<CategoryRule, "pattern" | "category">[];
   preferPdfCategory?: boolean;
-}) {
+}): ParsedExpense | null {
   const dateMatch = input.group.match(dateAtStartPattern);
   const amountMatch = findLastAmount(input.group);
 
@@ -177,6 +179,7 @@ function buildParsedExpense(input: {
   }
 
   const beforeAmount = input.group.slice(10, amountMatch.index);
+  const installment = parseInstallmentInfo(beforeAmount);
   const pdfCategory = input.preferPdfCategory ? mapGarantiCategory(beforeAmount) : null;
   const description = cleanDescription(
     input.preferPdfCategory ? stripGarantiCategory(beforeAmount) : beforeAmount,
@@ -198,13 +201,16 @@ function buildParsedExpense(input: {
     suggestedCategory: category,
     matchedRule: pdfCategory ? "PDF etiketi" : categoryResult.matchedRule,
     hashSeed: `${date}|${description}|${amount.toFixed(2)}`,
+    installmentCurrent: installment?.installmentCurrent ?? null,
+    installmentTotal: installment?.installmentTotal ?? null,
+    installmentOriginalAmount: installment?.installmentOriginalAmount ?? null,
   } satisfies ParsedExpense;
 }
 
 function buildYapiExpense(
   group: string,
   rules: Pick<CategoryRule, "pattern" | "category">[],
-) {
+): ParsedExpense | null {
   const dateMatch = group.match(dateAtStartPattern);
   const cardMatch = group.match(yapiCardPattern);
 
@@ -222,11 +228,13 @@ function buildYapiExpense(
 
   const amountText = amountMatch[1];
   const amount = parseTurkishAmount(amountText);
-  if (amount <= 0 || !isNegativeAmount(amountText)) {
+  if (amount <= 0 || amountText.trim().startsWith("+")) {
     return null;
   }
 
-  const description = cleanDescription(group.slice(10, cardMatch.index));
+  const rawDescription = group.slice(10, cardMatch.index);
+  const installment = parseInstallmentInfo(rawDescription);
+  const description = cleanDescription(rawDescription);
   if (!description || shouldSkip(description)) {
     return null;
   }
@@ -242,22 +250,28 @@ function buildYapiExpense(
     suggestedCategory: categoryResult.category,
     matchedRule: categoryResult.matchedRule,
     hashSeed: `${date}|${description}|${amount.toFixed(2)}`,
+    installmentCurrent: installment?.installmentCurrent ?? null,
+    installmentTotal: installment?.installmentTotal ?? null,
+    installmentOriginalAmount: installment?.installmentOriginalAmount ?? null,
   } satisfies ParsedExpense;
 }
 
 export function parseStatementText(
   text: string,
   rules: Pick<CategoryRule, "pattern" | "category">[],
+  bank: Bank | "all" = "unknown",
 ): ParsedExpense[] {
   const lines = compactLines(text);
-  const isGaranti = text.includes("Garanti") || text.includes("BONUS PLATINUM");
-  const isYapiKredi = text.includes("Yapı ve Kredi") || text.includes("yapikredi");
+  const isGaranti = bank === "garanti" || text.includes("Garanti") || text.includes("BONUS PLATINUM");
+  const isYapiKredi = bank === "yapikredi" || text.includes("Yapı ve Kredi") || text.includes("yapikredi");
   const groups = groupTransactions(lines);
-  const filteredGroups = groups.filter((group, index) => {
-    const previous = groups[index - 1];
-    const next = groups[index + 1];
-    return !((previous && isRefundPair(previous, group)) || (next && isRefundPair(group, next)));
-  });
+  const filteredGroups = isGaranti
+    ? groups.filter((group, index) => {
+        const previous = groups[index - 1];
+        const next = groups[index + 1];
+        return !((previous && isRefundPair(previous, group)) || (next && isRefundPair(group, next)));
+      })
+    : groups;
 
   return filteredGroups
     .map((group) =>

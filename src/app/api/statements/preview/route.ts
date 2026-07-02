@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { listRules } from "@/lib/db";
 import { extractPdfText, parseStatementText } from "@/lib/pdf";
 import { parseStatementSpreadsheet } from "@/lib/spreadsheet";
+import type { Bank } from "@/lib/types";
 import { isUploadedFile } from "@/lib/upload";
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
+    const bank = String(formData.get("bank") || "unknown") as Bank;
 
     if (!isUploadedFile(file)) {
       return NextResponse.json({ error: "Ekstre dosyasi gerekli." }, { status: 400 });
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
     const extension = file.name.split(".").pop()?.toLowerCase();
 
     if (extension === "xls" || extension === "xlsx") {
-      const rows = parseStatementSpreadsheet(buffer, rules);
+      const rows = parseStatementSpreadsheet(buffer, rules, bank);
       return NextResponse.json({ rows });
     }
 
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const rows = parseStatementText(text, rules);
+    const rows = parseStatementText(text, rules, bank);
 
     return NextResponse.json({ rows });
   } catch (error) {

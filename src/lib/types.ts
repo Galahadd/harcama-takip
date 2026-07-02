@@ -1,4 +1,4 @@
-export type ExpenseSource = "pdf" | "manual";
+export type ExpenseSource = "pdf" | "manual" | "projected";
 export type Bank = "garanti" | "yapikredi" | "manual" | "unknown";
 
 export type Expense = {
@@ -10,6 +10,10 @@ export type Expense = {
   category: string;
   source: ExpenseSource;
   bank: Bank;
+  installmentCurrent: number | null;
+  installmentTotal: number | null;
+  installmentOriginalAmount: number | null;
+  projected: boolean;
   createdAt: string;
 };
 
@@ -38,6 +42,9 @@ export type ParsedExpense = {
   suggestedCategory: string;
   matchedRule: string | null;
   hashSeed: string;
+  installmentCurrent?: number | null;
+  installmentTotal?: number | null;
+  installmentOriginalAmount?: number | null;
 };
 
 export type MonthOption = {
@@ -48,4 +55,65 @@ export type MonthOption = {
 export type CategoryTotal = {
   category: string;
   total: number;
+};
+
+export type FutureInstallment = {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  bank: Bank;
+  month: number;
+  year: number;
+  installmentNumber: number;
+  installmentTotal: number;
+};
+
+export type ActiveInstallment = {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  bank: Bank;
+  currentInstallment: number;
+  totalInstallments: number;
+  remainingInstallments: number;
+  remainingTotal: number;
+  lastMonth: number;
+  lastYear: number;
+};
+
+export type MonthlyInstallmentTotal = {
+  month: number;
+  year: number;
+  total: number;
+  count: number;
+  bankTotals: Array<{
+    bank: Bank;
+    total: number;
+  }>;
+};
+
+export type InstallmentBankTotal = {
+  bank: Bank;
+  total: number;
+};
+
+export type InstallmentSummary = {
+  activeInstallments: ActiveInstallment[];
+  monthlyInstallmentTotals: MonthlyInstallmentTotal[];
+  bankTotals: InstallmentBankTotal[];
+  remainingTotal: number;
+  nextMonthTotal: number;
+  maxMonthlyTotal: number;
+};
+
+export type GoldEntry = {
+  id: string;
+  month: number;
+  year: number;
+  grams: number;
+  pricePerGram: number | null;
+  note: string | null;
+  createdAt: string;
 };

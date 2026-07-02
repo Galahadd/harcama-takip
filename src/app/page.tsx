@@ -16,8 +16,10 @@ import {
   RefreshCcw,
   Save,
   Trash2,
+  TrendingUp,
   WalletCards,
 } from "lucide-react";
+import Link from "next/link";
 import clsx from "clsx";
 import { categories, currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import {
@@ -25,7 +27,15 @@ import {
   formatBank,
   uploadBankOptions,
 } from "@/lib/format";
-import type { Bank, CategoryTotal, Expense, MonthOption, ParsedExpense } from "@/lib/types";
+import type {
+  Bank,
+  CategoryTotal,
+  Expense,
+  FutureInstallment,
+  InstallmentSummary,
+  MonthOption,
+  ParsedExpense,
+} from "@/lib/types";
 
 const chartColors = [
   "#0f766e",
@@ -46,6 +56,8 @@ type Summary = {
   bank: string;
   months: MonthOption[];
   expenses: Expense[];
+  futureInstallments: FutureInstallment[];
+  installmentSummary: InstallmentSummary;
   total: number;
   categoryTotals: CategoryTotal[];
 };
@@ -58,9 +70,23 @@ const emptySummary: Summary = {
   bank: "all",
   months: [],
   expenses: [],
+  futureInstallments: [],
+  installmentSummary: {
+    activeInstallments: [],
+    monthlyInstallmentTotals: [],
+    bankTotals: [],
+    remainingTotal: 0,
+    nextMonthTotal: 0,
+    maxMonthlyTotal: 0,
+  },
   total: 0,
   categoryTotals: [],
 };
+
+function previousMonthOption() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() - 1, 1);
+}
 
 export default function Home() {
   const current = currentMonthOption();
@@ -79,6 +105,9 @@ export default function Home() {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [uploadBank, setUploadBank] = useState<Bank>("garanti");
+  const previousMonth = previousMonthOption();
+  const [uploadMonth, setUploadMonth] = useState(previousMonth.getMonth() + 1);
+  const [uploadYear, setUploadYear] = useState(previousMonth.getFullYear());
   const [previewRows, setPreviewRows] = useState<ParsedExpense[]>([]);
   const [previewing, setPreviewing] = useState(false);
   const [completionMessage, setCompletionMessage] = useState("");
@@ -131,7 +160,8 @@ export default function Home() {
   }, [summary.expenses, sortDirection, sortKey]);
 
   const allVisibleSelected =
-    sortedExpenses.length > 0 && sortedExpenses.every((expense) => selectedExpenseIds.has(expense.id));
+    sortedExpenses.some((expense) => !expense.projected) &&
+    sortedExpenses.filter((expense) => !expense.projected).every((expense) => selectedExpenseIds.has(expense.id));
 
   function toggleExpenseSelection(id: string) {
     setSelectedExpenseIds((currentIds) => {
@@ -153,7 +183,9 @@ export default function Home() {
 
       const next = new Set(currentIds);
       for (const expense of sortedExpenses) {
-        next.add(expense.id);
+        if (!expense.projected) {
+          next.add(expense.id);
+        }
       }
       return next;
     });
@@ -264,6 +296,7 @@ export default function Home() {
     setMessage("");
     const formData = new FormData();
     formData.set("file", pdfFile);
+    formData.set("bank", uploadBank);
     const response = await fetch("/api/statements/preview", {
       method: "POST",
       body: formData,
@@ -288,8 +321,8 @@ export default function Home() {
 
     const formData = new FormData();
     formData.set("file", pdfFile);
-    formData.set("month", String(selectedMonth));
-    formData.set("year", String(selectedYear));
+    formData.set("month", String(uploadMonth));
+    formData.set("year", String(uploadYear));
     formData.set("bank", uploadBank);
     formData.set("rows", JSON.stringify(previewRows));
 
@@ -307,9 +340,11 @@ export default function Home() {
     setPreviewRows([]);
     setPdfFile(null);
     const doneMessage = `${data.inserted} yeni harcama kaydedildi.`;
+    setSelectedMonth(uploadMonth);
+    setSelectedYear(uploadYear);
     setMessage(doneMessage);
     setCompletionMessage(doneMessage);
-    await loadSummary();
+    await loadSummary(uploadMonth, uploadYear);
   }
 
   async function logout() {
@@ -355,6 +390,19 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <nav className="flex rounded-md border border-slate-200 bg-white text-sm">
+              <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-800 font-medium rounded-l-md border-r border-slate-200">
+                <WalletCards size={15} />
+                Harcamalar
+              </span>
+              <Link
+                href="/yatirimlar"
+                className="flex items-center gap-1.5 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-r-md"
+              >
+                <TrendingUp size={15} />
+                Yatirimlar
+              </Link>
+            </nav>
             <select
               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
               value={`${selectedYear}-${selectedMonth}`}
@@ -547,13 +595,21 @@ export default function Home() {
                       <td className="whitespace-nowrap px-5 py-3">
                         <input
                           type="checkbox"
-                          checked={selectedExpenseIds.has(expense.id)}
+                          checked={!expense.projected && selectedExpenseIds.has(expense.id)}
                           onChange={() => toggleExpenseSelection(expense.id)}
+                          disabled={expense.projected}
                           aria-label="Harcama sec"
                         />
                       </td>
                       <td className="whitespace-nowrap px-5 py-3">{expense.date}</td>
-                      <td className="min-w-64 px-5 py-3">{expense.description}</td>
+                      <td className="min-w-64 px-5 py-3">
+                        <div>{expense.description}</div>
+                        {expense.installmentCurrent && expense.installmentTotal ? (
+                          <span className="mt-1 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                            {expense.installmentCurrent}/{expense.installmentTotal} taksit
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="whitespace-nowrap px-5 py-3">{expense.category}</td>
                       <td className="whitespace-nowrap px-5 py-3">{formatBank(expense.bank)}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-right font-medium">
@@ -563,29 +619,41 @@ export default function Home() {
                         <span
                           className={clsx(
                             "rounded-md px-2 py-1 text-xs font-medium",
-                            expense.source === "pdf"
+                            expense.source === "projected"
+                              ? "bg-amber-50 text-amber-700"
+                              : expense.source === "pdf"
                               ? "bg-blue-50 text-blue-700"
                               : "bg-teal-50 text-teal-700",
                           )}
                         >
-                          {expense.source === "pdf" ? "PDF" : "Manuel"}
+                          {expense.source === "projected"
+                            ? "Planlanan"
+                            : expense.source === "pdf"
+                              ? "PDF"
+                              : "Manuel"}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-5 py-3 text-right">
-                        <button
-                          className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 hover:bg-slate-50"
-                          onClick={() => startEdit(expense)}
-                          title="Duzenle"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-red-700 hover:bg-red-50"
-                          onClick={() => deleteExpense(expense.id)}
-                          title="Sil"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {expense.projected ? (
+                          <span className="text-xs text-slate-400">Plan</span>
+                        ) : (
+                          <>
+                            <button
+                              className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 hover:bg-slate-50"
+                              onClick={() => startEdit(expense)}
+                              title="Duzenle"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-red-700 hover:bg-red-50"
+                              onClick={() => deleteExpense(expense.id)}
+                              title="Sil"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -670,6 +738,27 @@ export default function Home() {
                 accept="application/pdf,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
               />
+              <div className="grid grid-cols-[1fr_96px] gap-2">
+                <select
+                  className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={uploadMonth}
+                  onChange={(event) => setUploadMonth(Number(event.target.value))}
+                >
+                  {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                    <option key={month} value={month}>
+                      {formatMonth(month, uploadYear).replace(` ${uploadYear}`, "")}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="h-10 rounded-md border border-slate-300 px-3 text-sm"
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  value={uploadYear}
+                  onChange={(event) => setUploadYear(Number(event.target.value))}
+                />
+              </div>
               <select
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                 value={uploadBank}
@@ -705,7 +794,12 @@ export default function Home() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{row.description}</p>
-                        <p className="text-xs text-slate-500">{row.date}</p>
+                        <p className="text-xs text-slate-500">
+                          {row.date}
+                          {row.installmentCurrent && row.installmentTotal
+                            ? ` · ${row.installmentCurrent}/${row.installmentTotal} taksit`
+                            : ""}
+                        </p>
                       </div>
                       <p className="whitespace-nowrap text-sm font-semibold">{formatCurrency(row.amount)}</p>
                     </div>

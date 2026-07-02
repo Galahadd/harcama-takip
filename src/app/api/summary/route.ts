@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentMonthOption } from "@/lib/format";
-import { listExpenses, listMonthOptions } from "@/lib/db";
+import { listExpenses, listFutureInstallments, listInstallmentSummary, listMonthOptions } from "@/lib/db";
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +9,12 @@ export async function GET(request: Request) {
     const month = Number(url.searchParams.get("month") || fallback.month);
     const year = Number(url.searchParams.get("year") || fallback.year);
     const bank = url.searchParams.get("bank") || "all";
-    const [expenses, months] = await Promise.all([listExpenses(month, year, bank), listMonthOptions()]);
+    const [expenses, months, futureInstallments, installmentSummary] = await Promise.all([
+      listExpenses(month, year, bank),
+      listMonthOptions(),
+      listFutureInstallments(month, year, bank),
+      listInstallmentSummary(month, year, bank),
+    ]);
 
     const categoryTotals = expenses.reduce<Record<string, number>>((acc, expense) => {
       acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
@@ -22,6 +27,8 @@ export async function GET(request: Request) {
       bank,
       months,
       expenses,
+      futureInstallments,
+      installmentSummary,
       total: expenses.reduce((sum, expense) => sum + expense.amount, 0),
       categoryTotals: Object.entries(categoryTotals)
         .map(([category, total]) => ({ category, total }))

@@ -27,9 +27,13 @@ export async function POST(request: Request) {
         description: row.description.trim(),
         amount: Number(row.amount),
         category: row.category,
+        installmentCurrent: row.installmentCurrent ?? null,
+        installmentTotal: row.installmentTotal ?? null,
+        installmentOriginalAmount: row.installmentOriginalAmount ?? null,
         duplicateHash: expenseHash({
           month,
           year,
+          bank,
           date: row.date,
           description: row.description,
           amount: Number(row.amount),
