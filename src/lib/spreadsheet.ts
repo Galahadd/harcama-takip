@@ -40,6 +40,18 @@ function cleanDescription(description: string) {
     .trim();
 }
 
+function isNegativeAmount(value: string) {
+  return value.trim().startsWith("-");
+}
+
+function isRefundPair(currentAmount: string, nextAmount: string) {
+  return (
+    isNegativeAmount(currentAmount) &&
+    !isNegativeAmount(nextAmount) &&
+    parseTurkishAmount(currentAmount) === parseTurkishAmount(nextAmount)
+  );
+}
+
 function categoryFromSector(sector: string) {
   const normalized = normalizeText(sector);
   const match = sectorMap.find((entry) =>
@@ -114,13 +126,25 @@ export function parseStatementSpreadsheet(
 
   const parsed: ParsedExpense[] = [];
 
-  for (const row of rows.slice(headerIndex + 1)) {
+  const dataRows = rows.slice(headerIndex + 1);
+
+  for (let index = 0; index < dataRows.length; index += 1) {
+    const row = dataRows[index];
     const date = parseDate(cellText(row[dateIndex]));
     const description = cleanDescription(cellText(row[descriptionIndex]));
     const sector = sectorIndex >= 0 ? cellText(row[sectorIndex]) : "";
     const amountText = cellText(row[amountIndex]);
+    const previousAmount = index > 0 ? cellText(dataRows[index - 1][amountIndex]) : "";
+    const nextAmount = index < dataRows.length - 1 ? cellText(dataRows[index + 1][amountIndex]) : "";
 
-    if (!date || !description || !amountText || amountText.startsWith("+")) {
+    if (
+      !date ||
+      !description ||
+      !amountText ||
+      !isNegativeAmount(amountText) ||
+      (previousAmount && isRefundPair(previousAmount, amountText)) ||
+      (nextAmount && isRefundPair(amountText, nextAmount))
+    ) {
       continue;
     }
 

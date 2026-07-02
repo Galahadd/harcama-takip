@@ -121,6 +121,21 @@ function findFirstAmount(value: string) {
   return [...value.matchAll(signedAmountPattern)].at(0) ?? null;
 }
 
+function isNegativeAmount(value: string) {
+  return value.trim().startsWith("-");
+}
+
+function isRefundPair(currentGroup: string, nextGroup: string) {
+  const currentAmount = findLastAmount(currentGroup)?.[1];
+  const nextAmount = findLastAmount(nextGroup)?.[1];
+
+  if (!currentAmount || !nextAmount || !isNegativeAmount(currentAmount) || isNegativeAmount(nextAmount)) {
+    return false;
+  }
+
+  return parseTurkishAmount(currentAmount) === parseTurkishAmount(nextAmount);
+}
+
 function mapGarantiCategory(value: string) {
   const normalized = normalizeText(value);
   const match = garantiCategoryMap.find((entry) =>
@@ -157,7 +172,7 @@ function buildParsedExpense(input: {
   const [, day, month, year] = dateMatch;
   const amountText = amountMatch[1];
   const amount = parseTurkishAmount(amountText);
-  if (amount <= 0 || amountText.startsWith("+")) {
+  if (amount <= 0 || !isNegativeAmount(amountText)) {
     return null;
   }
 
@@ -207,7 +222,7 @@ function buildYapiExpense(
 
   const amountText = amountMatch[1];
   const amount = parseTurkishAmount(amountText);
-  if (amount <= 0 || amountText.startsWith("+")) {
+  if (amount <= 0 || !isNegativeAmount(amountText)) {
     return null;
   }
 
@@ -238,8 +253,13 @@ export function parseStatementText(
   const isGaranti = text.includes("Garanti") || text.includes("BONUS PLATINUM");
   const isYapiKredi = text.includes("Yapı ve Kredi") || text.includes("yapikredi");
   const groups = groupTransactions(lines);
+  const filteredGroups = groups.filter((group, index) => {
+    const previous = groups[index - 1];
+    const next = groups[index + 1];
+    return !((previous && isRefundPair(previous, group)) || (next && isRefundPair(group, next)));
+  });
 
-  return groups
+  return filteredGroups
     .map((group) =>
       isYapiKredi
         ? buildYapiExpense(group, rules)

@@ -81,6 +81,7 @@ export default function Home() {
   const [uploadBank, setUploadBank] = useState<Bank>("garanti");
   const [previewRows, setPreviewRows] = useState<ParsedExpense[]>([]);
   const [previewing, setPreviewing] = useState(false);
+  const [completionMessage, setCompletionMessage] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
@@ -305,7 +306,9 @@ export default function Home() {
 
     setPreviewRows([]);
     setPdfFile(null);
-    setMessage(`${data.inserted} yeni harcama kaydedildi.`);
+    const doneMessage = `${data.inserted} yeni harcama kaydedildi.`;
+    setMessage(doneMessage);
+    setCompletionMessage(doneMessage);
     await loadSummary();
   }
 
@@ -326,6 +329,20 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
+      {completionMessage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="w-full max-w-sm rounded-md bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">Içe aktarma tamamlandi</h2>
+            <p className="mt-2 text-sm text-slate-600">{completionMessage}</p>
+            <button
+              className="mt-5 h-10 w-full rounded-md bg-teal-700 text-sm font-medium text-white hover:bg-teal-800"
+              onClick={() => setCompletionMessage("")}
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      ) : null}
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div className="flex items-center gap-3">
