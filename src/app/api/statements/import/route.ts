@@ -3,6 +3,7 @@ import { buildRulePattern, isKnownCategory } from "@/lib/categorize";
 import { importStatement, upsertRule } from "@/lib/db";
 import { expenseHash } from "@/lib/hash";
 import type { ParsedExpense } from "@/lib/types";
+import { isUploadedFile } from "@/lib/upload";
 
 export async function POST(request: Request) {
   try {
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
     const rowsText = String(formData.get("rows") || "[]");
     const rows = JSON.parse(rowsText) as ParsedExpense[];
 
-    if (!(file instanceof File) || !month || !year || !Array.isArray(rows)) {
-      return NextResponse.json({ error: "Ay, yil, PDF ve satirlar gerekli." }, { status: 400 });
+    if (!isUploadedFile(file) || !month || !year || !Array.isArray(rows)) {
+      return NextResponse.json({ error: "Ay, yil, ekstre dosyasi ve satirlar gerekli." }, { status: 400 });
     }
 
     const cleanRows = rows
