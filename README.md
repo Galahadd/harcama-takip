@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Aylik Harcama Takibi
 
-## Getting Started
+Kisisel kullanim icin tasarlanmis Next.js uygulamasi. Garanti BBVA kredi karti ekstresi PDF'lerini okuyup aylik harcamalari sektor bazinda takip eder, pasta grafikle dagilimi gosterir ve manuel harcama girisine izin verir.
 
-First, run the development server:
+## Ozellikler
+
+- Tek sifreli giris
+- Garanti BBVA metin PDF ekstresi onizleme ve ice aktarma
+- PDF satirlarinda sektor duzeltme ve kategori kurali ogrenme
+- Manuel harcama ekleme, duzenleme ve silme
+- Aylik toplam, sektor toplam tablosu ve pasta grafik
+- Duplicate harcama engelleme
+- PDF dosyasini public storage yerine PostgreSQL `bytea` tablosunda private saklama
+
+## Kurulum
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` degerleri:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+APP_PASSWORD=change-this-password
+AUTH_SECRET=change-this-long-random-secret
+DATABASE_URL=postgres://user:password@host:5432/database?sslmode=require
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Varsayilan lokal sifre `admin`, ancak deploy etmeden once `APP_PASSWORD` ve `AUTH_SECRET` mutlaka ayarlanmalidir.
 
-## Learn More
+## Vercel Deploy
 
-To learn more about Next.js, take a look at the following resources:
+1. Projeyi GitHub'a push edin.
+2. Vercel'de yeni proje olarak import edin.
+3. Environment Variables alanina `APP_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL` ekleyin.
+4. PostgreSQL icin Supabase veya Neon kullanabilirsiniz.
+5. Deploy edin. Uygulama ilk API isteginde gerekli tablolari otomatik olusturur.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Notlar
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- PDF parser metin secilebilir PDF'ler icindir; OCR yoktur.
+- Ilk banka formati Garanti BBVA olarak hedeflenmistir. Gercek ekstrede satir yapisi farkliysa `src/lib/pdf.ts` icindeki regex/parser uyarlanmalidir.
+- Taksitli harcamalar ekstrede gorunen aylik tutar kadar kaydedilir.
