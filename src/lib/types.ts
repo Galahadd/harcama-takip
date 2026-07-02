@@ -1,4 +1,5 @@
 export type ExpenseSource = "pdf" | "manual";
+export type Bank = "garanti" | "yapikredi" | "manual" | "unknown";
 
 export type Expense = {
   id: string;
@@ -8,6 +9,7 @@ export type Expense = {
   amount: number;
   category: string;
   source: ExpenseSource;
+  bank: Bank;
   createdAt: string;
 };
 
@@ -17,6 +19,7 @@ export type Statement = {
   year: number;
   filePath: string;
   originalFileName: string;
+  bank: Bank;
   uploadedAt: string;
 };
 

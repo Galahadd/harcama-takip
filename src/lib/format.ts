@@ -15,6 +15,22 @@ export const categories = [
   "Diger",
 ];
 
+export const bankOptions = [
+  { value: "all", label: "Tum bankalar" },
+  { value: "garanti", label: "Garanti BBVA" },
+  { value: "yapikredi", label: "Yapi Kredi" },
+  { value: "manual", label: "Manuel" },
+] as const;
+
+export const uploadBankOptions = [
+  { value: "garanti", label: "Garanti BBVA" },
+  { value: "yapikredi", label: "Yapi Kredi" },
+] as const;
+
+export function formatBank(bank: string) {
+  return bankOptions.find((option) => option.value === bank)?.label ?? "Bilinmeyen";
+}
+
 export function formatCurrency(amount: number) {
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",

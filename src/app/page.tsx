@@ -20,7 +20,12 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { categories, currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
-import type { CategoryTotal, Expense, MonthOption, ParsedExpense } from "@/lib/types";
+import {
+  bankOptions,
+  formatBank,
+  uploadBankOptions,
+} from "@/lib/format";
+import type { Bank, CategoryTotal, Expense, MonthOption, ParsedExpense } from "@/lib/types";
 
 const chartColors = [
   "#0f766e",
@@ -38,14 +43,19 @@ const chartColors = [
 type Summary = {
   month: number;
   year: number;
+  bank: string;
   months: MonthOption[];
   expenses: Expense[];
   total: number;
   categoryTotals: CategoryTotal[];
 };
 
+type SortKey = "date" | "amount" | "category";
+type SortDirection = "asc" | "desc";
+
 const emptySummary: Summary = {
   ...currentMonthOption(),
+  bank: "all",
   months: [],
   expenses: [],
   total: 0,
@@ -56,6 +66,7 @@ export default function Home() {
   const current = currentMonthOption();
   const [selectedMonth, setSelectedMonth] = useState(current.month);
   const [selectedYear, setSelectedYear] = useState(current.year);
+  const [selectedBank, setSelectedBank] = useState("all");
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -67,18 +78,23 @@ export default function Home() {
   });
   const [editing, setEditing] = useState<Expense | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [uploadBank, setUploadBank] = useState<Bank>("garanti");
   const [previewRows, setPreviewRows] = useState<ParsedExpense[]>([]);
   const [previewing, setPreviewing] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
 
-  async function loadSummary(month = selectedMonth, year = selectedYear) {
+  async function loadSummary(month = selectedMonth, year = selectedYear, bank = selectedBank) {
     setLoading(true);
     setMessage("");
-    const response = await fetch(`/api/summary?month=${month}&year=${year}`);
+    const response = await fetch(`/api/summary?month=${month}&year=${year}&bank=${bank}`);
     const data = await response.json();
     if (!response.ok) {
       setMessage(data.error || "Veri alinamadi.");
     } else {
       setSummary(data);
+      setSelectedExpenseIds(new Set());
     }
     setLoading(false);
   }
@@ -86,7 +102,7 @@ export default function Home() {
   useEffect(() => {
     loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, selectedBank]);
 
   const monthOptions = useMemo(() => {
     const known = summary.months.map((item) => `${item.year}-${item.month}`);
@@ -96,6 +112,51 @@ export default function Home() {
       : [{ month: selectedMonth, year: selectedYear }, ...summary.months];
     return options;
   }, [summary.months, selectedMonth, selectedYear]);
+
+  const sortedExpenses = useMemo(() => {
+    return [...summary.expenses].sort((a, b) => {
+      const direction = sortDirection === "asc" ? 1 : -1;
+
+      if (sortKey === "amount") {
+        return (a.amount - b.amount) * direction;
+      }
+
+      if (sortKey === "category") {
+        return a.category.localeCompare(b.category, "tr") * direction;
+      }
+
+      return a.date.localeCompare(b.date) * direction;
+    });
+  }, [summary.expenses, sortDirection, sortKey]);
+
+  const allVisibleSelected =
+    sortedExpenses.length > 0 && sortedExpenses.every((expense) => selectedExpenseIds.has(expense.id));
+
+  function toggleExpenseSelection(id: string) {
+    setSelectedExpenseIds((currentIds) => {
+      const next = new Set(currentIds);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllVisibleExpenses() {
+    setSelectedExpenseIds((currentIds) => {
+      if (allVisibleSelected) {
+        return new Set();
+      }
+
+      const next = new Set(currentIds);
+      for (const expense of sortedExpenses) {
+        next.add(expense.id);
+      }
+      return next;
+    });
+  }
 
   async function saveManualExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -142,10 +203,59 @@ export default function Home() {
     await loadSummary();
   }
 
+  async function deleteSelectedExpenses() {
+    const ids = [...selectedExpenseIds];
+    if (!ids.length) {
+      setMessage("Silmek icin once harcama secin.");
+      return;
+    }
+
+    if (!window.confirm(`${ids.length} harcama silinsin mi?`)) {
+      return;
+    }
+
+    const response = await fetch("/api/expenses", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      setMessage(data.error || "Secili harcamalar silinemedi.");
+      return;
+    }
+
+    setMessage(`${data.deleted} harcama silindi.`);
+    await loadSummary();
+  }
+
+  async function deleteCurrentMonthExpenses() {
+    const bankLabel = selectedBank === "all" ? "tum bankalar" : formatBank(selectedBank);
+    if (!window.confirm(`${formatMonth(selectedMonth, selectedYear)} icin ${bankLabel} harcamalari silinsin mi?`)) {
+      return;
+    }
+
+    const response = await fetch("/api/expenses", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: selectedMonth, year: selectedYear, bank: selectedBank }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      setMessage(data.error || "Ay harcamalari silinemedi.");
+      return;
+    }
+
+    setMessage(`${data.deleted} harcama silindi.`);
+    await loadSummary();
+  }
+
   async function previewPdf(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!pdfFile) {
-      setMessage("PDF dosyasi secin.");
+      setMessage("Ekstre dosyasi secin.");
       return;
     }
 
@@ -161,7 +271,7 @@ export default function Home() {
     setPreviewing(false);
 
     if (!response.ok) {
-      setMessage(data.error || "PDF okunamadi.");
+      setMessage(data.error || "Ekstre okunamadi.");
       return;
     }
 
@@ -179,6 +289,7 @@ export default function Home() {
     formData.set("file", pdfFile);
     formData.set("month", String(selectedMonth));
     formData.set("year", String(selectedYear));
+    formData.set("bank", uploadBank);
     formData.set("rows", JSON.stringify(previewRows));
 
     const response = await fetch("/api/statements/import", {
@@ -239,6 +350,17 @@ export default function Home() {
               {monthOptions.map((option) => (
                 <option key={`${option.year}-${option.month}`} value={`${option.year}-${option.month}`}>
                   {formatMonth(option.month, option.year)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+              value={selectedBank}
+              onChange={(event) => setSelectedBank(event.target.value)}
+            >
+              {bankOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -347,27 +469,76 @@ export default function Home() {
           </div>
 
           <div className="rounded-md border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-5 py-4">
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
               <h2 className="text-base font-semibold">Harcama listesi</h2>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                  value={sortKey}
+                  onChange={(event) => setSortKey(event.target.value as SortKey)}
+                >
+                  <option value="date">Tarihe gore</option>
+                  <option value="amount">Tutara gore</option>
+                  <option value="category">Sektore gore</option>
+                </select>
+                <select
+                  className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                  value={sortDirection}
+                  onChange={(event) => setSortDirection(event.target.value as SortDirection)}
+                >
+                  <option value="desc">Azalan</option>
+                  <option value="asc">Artan</option>
+                </select>
+                <button
+                  className="h-9 rounded-md border border-slate-300 px-3 text-sm hover:bg-slate-50"
+                  onClick={deleteSelectedExpenses}
+                >
+                  Secilenleri sil
+                </button>
+                <button
+                  className="h-9 rounded-md border border-red-300 px-3 text-sm text-red-700 hover:bg-red-50"
+                  onClick={deleteCurrentMonthExpenses}
+                >
+                  Ayi sil
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
+                    <th className="px-5 py-3 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisibleExpenses}
+                        aria-label="Tum harcamalari sec"
+                      />
+                    </th>
                     <th className="px-5 py-3 font-medium">Tarih</th>
                     <th className="px-5 py-3 font-medium">Aciklama</th>
                     <th className="px-5 py-3 font-medium">Sektor</th>
+                    <th className="px-5 py-3 font-medium">Banka</th>
                     <th className="px-5 py-3 text-right font-medium">Tutar</th>
                     <th className="px-5 py-3 font-medium">Kaynak</th>
                     <th className="px-5 py-3 text-right font-medium">Islem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {summary.expenses.map((expense) => (
+                  {sortedExpenses.map((expense) => (
                     <tr key={expense.id} className="hover:bg-slate-50">
+                      <td className="whitespace-nowrap px-5 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedExpenseIds.has(expense.id)}
+                          onChange={() => toggleExpenseSelection(expense.id)}
+                          aria-label="Harcama sec"
+                        />
+                      </td>
                       <td className="whitespace-nowrap px-5 py-3">{expense.date}</td>
                       <td className="min-w-64 px-5 py-3">{expense.description}</td>
                       <td className="whitespace-nowrap px-5 py-3">{expense.category}</td>
+                      <td className="whitespace-nowrap px-5 py-3">{formatBank(expense.bank)}</td>
                       <td className="whitespace-nowrap px-5 py-3 text-right font-medium">
                         {formatCurrency(expense.amount)}
                       </td>
@@ -482,6 +653,17 @@ export default function Home() {
                 accept="application/pdf,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
               />
+              <select
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                value={uploadBank}
+                onChange={(event) => setUploadBank(event.target.value as Bank)}
+              >
+                {uploadBankOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
               <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
                 <FileUp size={16} />
                 {previewing ? "Okunuyor..." : "Onizleme al"}

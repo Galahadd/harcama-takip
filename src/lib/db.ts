@@ -1,5 +1,5 @@
 import postgres from "postgres";
-import type { CategoryRule, Expense, MonthOption } from "./types";
+import type { Bank, CategoryRule, Expense, MonthOption } from "./types";
 
 let client: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
@@ -78,6 +78,8 @@ export async function ensureSchema() {
       stored_at timestamptz not null default now()
     )
   `;
+  await db`alter table statements add column if not exists bank text not null default 'unknown'`;
+  await db`alter table expenses add column if not exists bank text not null default 'unknown'`;
 
   schemaReady = true;
 }
@@ -91,6 +93,7 @@ function mapExpense(row: Record<string, unknown>): Expense {
     amount: Number(row.amount),
     category: String(row.category),
     source: row.source === "manual" ? "manual" : "pdf",
+    bank: String(row.bank || "unknown") as Bank,
     createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
@@ -125,15 +128,25 @@ export async function listMonthOptions(): Promise<MonthOption[]> {
   return rows;
 }
 
-export async function listExpenses(month: number, year: number) {
+export async function listExpenses(month: number, year: number, bank?: string) {
   await ensureSchema();
-  const rows = await sql()`
-    select *
-    from expenses
-    where extract(month from expense_date)::int = ${month}
-      and extract(year from expense_date)::int = ${year}
-    order by expense_date desc, created_at desc
-  `;
+  const rows =
+    bank && bank !== "all"
+      ? await sql()`
+          select *
+          from expenses
+          where extract(month from expense_date)::int = ${month}
+            and extract(year from expense_date)::int = ${year}
+            and bank = ${bank}
+          order by expense_date desc, created_at desc
+        `
+      : await sql()`
+          select *
+          from expenses
+          where extract(month from expense_date)::int = ${month}
+            and extract(year from expense_date)::int = ${year}
+          order by expense_date desc, created_at desc
+        `;
   return rows.map(mapExpense);
 }
 
@@ -146,8 +159,8 @@ export async function createManualExpense(input: {
 }) {
   await ensureSchema();
   const rows = await sql()`
-    insert into expenses (expense_date, description, amount, category, source, duplicate_hash)
-    values (${input.date}, ${input.description}, ${input.amount}, ${input.category}, 'manual', ${input.duplicateHash})
+    insert into expenses (expense_date, description, amount, category, source, bank, duplicate_hash)
+    values (${input.date}, ${input.description}, ${input.amount}, ${input.category}, 'manual', 'manual', ${input.duplicateHash})
     returning *
   `;
   return mapExpense(rows[0]);
@@ -175,9 +188,40 @@ export async function deleteExpense(id: string) {
   await sql()`delete from expenses where id = ${id}`;
 }
 
+export async function deleteExpensesByIds(ids: string[]) {
+  await ensureSchema();
+  if (!ids.length) {
+    return 0;
+  }
+  const db = sql();
+  const rows = await db`delete from expenses where id in ${db(ids)} returning id`;
+  return rows.length;
+}
+
+export async function deleteMonthExpenses(input: { month: number; year: number; bank?: string }) {
+  await ensureSchema();
+  const rows =
+    input.bank && input.bank !== "all"
+      ? await sql()`
+          delete from expenses
+          where extract(month from expense_date)::int = ${input.month}
+            and extract(year from expense_date)::int = ${input.year}
+            and bank = ${input.bank}
+          returning id
+        `
+      : await sql()`
+          delete from expenses
+          where extract(month from expense_date)::int = ${input.month}
+            and extract(year from expense_date)::int = ${input.year}
+          returning id
+        `;
+  return rows.length;
+}
+
 export async function importStatement(input: {
   month: number;
   year: number;
+  bank: Bank;
   originalFileName: string;
   fileBuffer: Buffer;
   fileMimeType: string;
@@ -194,10 +238,10 @@ export async function importStatement(input: {
 
   return db.begin(async (tx) => {
     const statementRows = await tx`
-      insert into statements (month, year, file_path, original_file_name)
-      values (${input.month}, ${input.year}, 'postgres://pending', ${input.originalFileName})
+      insert into statements (month, year, bank, file_path, original_file_name)
+      values (${input.month}, ${input.year}, ${input.bank}, 'postgres://pending', ${input.originalFileName})
       on conflict (month, year, original_file_name)
-      do update set uploaded_at = now()
+      do update set uploaded_at = now(), bank = excluded.bank
       returning id
     `;
 
@@ -224,7 +268,7 @@ export async function importStatement(input: {
     for (const expense of input.expenses) {
       const rows = await tx`
         insert into expenses (
-          statement_id, expense_date, description, amount, category, source, duplicate_hash
+          statement_id, expense_date, description, amount, category, source, bank, duplicate_hash
         )
         values (
           ${statementId},
@@ -233,6 +277,7 @@ export async function importStatement(input: {
           ${expense.amount},
           ${expense.category},
           'pdf',
+          ${input.bank},
           ${expense.duplicateHash}
         )
         on conflict (duplicate_hash) do nothing

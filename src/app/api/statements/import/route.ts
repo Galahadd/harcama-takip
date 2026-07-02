@@ -4,6 +4,7 @@ import { importStatement, upsertRule } from "@/lib/db";
 import { expenseHash } from "@/lib/hash";
 import type { ParsedExpense } from "@/lib/types";
 import { isUploadedFile } from "@/lib/upload";
+import type { Bank } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -11,11 +12,12 @@ export async function POST(request: Request) {
     const file = formData.get("file");
     const month = Number(formData.get("month"));
     const year = Number(formData.get("year"));
+    const bank = String(formData.get("bank") || "unknown") as Bank;
     const rowsText = String(formData.get("rows") || "[]");
     const rows = JSON.parse(rowsText) as ParsedExpense[];
 
-    if (!isUploadedFile(file) || !month || !year || !Array.isArray(rows)) {
-      return NextResponse.json({ error: "Ay, yil, ekstre dosyasi ve satirlar gerekli." }, { status: 400 });
+    if (!isUploadedFile(file) || !month || !year || !Array.isArray(rows) || !["garanti", "yapikredi"].includes(bank)) {
+      return NextResponse.json({ error: "Ay, yil, banka, ekstre dosyasi ve satirlar gerekli." }, { status: 400 });
     }
 
     const cleanRows = rows
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
     const result = await importStatement({
       month,
       year,
+      bank,
       originalFileName: file.name,
       fileBuffer,
       fileMimeType: file.type || "application/pdf",

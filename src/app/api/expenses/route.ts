@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createManualExpense } from "@/lib/db";
+import { createManualExpense, deleteExpensesByIds, deleteMonthExpenses } from "@/lib/db";
 import { expenseHash } from "@/lib/hash";
 import { isKnownCategory } from "@/lib/categorize";
 
@@ -39,6 +39,38 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Harcama eklenemedi." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      ids?: string[];
+      month?: number;
+      year?: number;
+      bank?: string;
+    };
+
+    if (Array.isArray(body.ids) && body.ids.length > 0) {
+      const deleted = await deleteExpensesByIds(body.ids);
+      return NextResponse.json({ deleted });
+    }
+
+    if (body.month && body.year) {
+      const deleted = await deleteMonthExpenses({
+        month: Number(body.month),
+        year: Number(body.year),
+        bank: body.bank,
+      });
+      return NextResponse.json({ deleted });
+    }
+
+    return NextResponse.json({ error: "Silinecek harcama veya ay bilgisi gerekli." }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Harcama silinemedi." },
       { status: 500 },
     );
   }

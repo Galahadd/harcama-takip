@@ -8,7 +8,8 @@ export async function GET(request: Request) {
     const fallback = currentMonthOption();
     const month = Number(url.searchParams.get("month") || fallback.month);
     const year = Number(url.searchParams.get("year") || fallback.year);
-    const [expenses, months] = await Promise.all([listExpenses(month, year), listMonthOptions()]);
+    const bank = url.searchParams.get("bank") || "all";
+    const [expenses, months] = await Promise.all([listExpenses(month, year, bank), listMonthOptions()]);
 
     const categoryTotals = expenses.reduce<Record<string, number>>((acc, expense) => {
       acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       month,
       year,
+      bank,
       months,
       expenses,
       total: expenses.reduce((sum, expense) => sum + expense.amount, 0),
