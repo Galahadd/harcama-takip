@@ -4,14 +4,25 @@ import type { CategoryRule, Expense, MonthOption } from "./types";
 let client: ReturnType<typeof postgres> | null = null;
 let schemaReady = false;
 
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.SUPABASE_DATABASE_URL ||
+    process.env.SUPABASE_DB_URL
+  );
+}
+
 function sql() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL is required.");
+  const databaseUrl = getDatabaseUrl();
+
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL, POSTGRES_URL, SUPABASE_DATABASE_URL or SUPABASE_DB_URL is required.");
   }
 
   if (!client) {
-    client = postgres(process.env.DATABASE_URL, {
-      ssl: process.env.DATABASE_URL.includes("sslmode=disable") ? false : "require",
+    client = postgres(databaseUrl, {
+      ssl: databaseUrl.includes("sslmode=disable") ? false : "require",
       max: 3,
     });
   }

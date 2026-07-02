@@ -28,15 +28,18 @@ AUTH_SECRET=change-this-long-random-secret
 DATABASE_URL=postgres://user:password@host:5432/database?sslmode=require
 ```
 
+Uygulama veritabani baglantisi icin sirasiyla `DATABASE_URL`, `POSTGRES_URL`, `SUPABASE_DATABASE_URL` ve `SUPABASE_DB_URL` degiskenlerine bakar. Vercel/Supabase entegrasyonu farkli isimde baglanti adresi urettiyse bunu `DATABASE_URL` olarak kopyalamak en net yoldur.
+
 Varsayilan lokal sifre `admin`, ancak deploy etmeden once `APP_PASSWORD` ve `AUTH_SECRET` mutlaka ayarlanmalidir.
 
 ## Vercel Deploy
 
 1. Projeyi GitHub'a push edin.
 2. Vercel'de yeni proje olarak import edin.
-3. Environment Variables alanina `APP_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL` ekleyin.
+3. Environment Variables alanina `APP_PASSWORD`, `AUTH_SECRET` ve PostgreSQL connection string ekleyin. Tavsiye edilen isim `DATABASE_URL`.
 4. PostgreSQL icin Supabase veya Neon kullanabilirsiniz.
-5. Deploy edin. Uygulama ilk API isteginde gerekli tablolari otomatik olusturur.
+5. Supabase connection string `sslmode=require` ile bitmelidir.
+6. Deploy edin. Uygulama ilk API isteginde gerekli tablolari otomatik olusturur.
 
 ## Notlar
 
