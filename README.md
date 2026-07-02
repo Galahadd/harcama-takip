@@ -5,7 +5,7 @@ Kisisel kullanim icin tasarlanmis Next.js uygulamasi. Garanti BBVA kredi karti e
 ## Ozellikler
 
 - Tek sifreli giris
-- Garanti BBVA metin PDF ekstresi onizleme ve ice aktarma
+- Garanti BBVA PDF, metin katmanli Yapi Kredi PDF ve Yapi Kredi Excel ekstresi onizleme ve ice aktarma
 - PDF satirlarinda sektor duzeltme ve kategori kurali ogrenme
 - Manuel harcama ekleme, duzenleme ve silme
 - Aylik toplam, sektor toplam tablosu ve pasta grafik
@@ -43,6 +43,6 @@ Varsayilan lokal sifre `admin`, ancak deploy etmeden once `APP_PASSWORD` ve `AUT
 
 ## Notlar
 
-- PDF parser metin secilebilir PDF'ler icindir; OCR yoktur.
-- Ilk banka formati Garanti BBVA olarak hedeflenmistir. Gercek ekstrede satir yapisi farkliysa `src/lib/pdf.ts` icindeki regex/parser uyarlanmalidir.
+- PDF parser metin secilebilir PDF'ler icindir; OCR yoktur. Tarayicidan `Print to PDF` ile uretilen ve metin katmani olmayan Yapi Kredi dosyalari yerine Yapi Kredi Excel hesap ozeti (`.xls`/`.xlsx`) kullanilabilir.
+- Desteklenen ilk banka formatlari Garanti BBVA ve Yapi Kredi'dir. Gercek ekstrede satir yapisi farkliysa `src/lib/pdf.ts` icindeki parser uyarlanmalidir.
 - Taksitli harcamalar ekstrede gorunen aylik tutar kadar kaydedilir.

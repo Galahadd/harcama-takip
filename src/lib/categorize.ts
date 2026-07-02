@@ -8,7 +8,7 @@ const keywordCategories: Array<{ category: string; keywords: string[] }> = [
   },
   {
     category: "Yeme Icme",
-    keywords: ["RESTAURANT", "REST", "KAFE", "CAFE", "YEMEK", "BURGER", "PIZZA", "STARBUCKS"],
+    keywords: ["RESTAURANT", "REST", "KAFE", "CAFE", "YEMEK", "BURGER", "PIZZA", "STARBUCKS", "TAVUK", "KEBAP", "SOFRA"],
   },
   {
     category: "Ulasim",
@@ -24,11 +24,27 @@ const keywordCategories: Array<{ category: string; keywords: string[] }> = [
   },
   {
     category: "Giyim",
-    keywords: ["ZARA", "H M", "LCW", "KOTON", "DEFACTO", "MAVI", "BOYNER", "Giyim"],
+    keywords: ["ZARA", "H M", "LCW", "KOTON", "DEFACTO", "MAVI", "BOYNER", "LEFTIES", "KUNDURA", "GIYIM"],
   },
   {
     category: "Online Alisveris",
-    keywords: ["AMAZON", "TRENDYOL", "HEPSIBURADA", "N11", "ALIEXPRESS", "PAZARAMA"],
+    keywords: ["AMAZON", "TRENDYOL", "HEPSIBURADA", "HEPSIPAY", "N11", "ALIEXPRESS", "PAZARAMA"],
+  },
+  {
+    category: "Eglence",
+    keywords: ["NETFLIX", "SPOTIFY", "PLAYSTATION", "YOUTUBE", "GOOGLE YOUTUBEPREMIUM", "SAHNE", "TURIZM"],
+  },
+  {
+    category: "Elektronik",
+    keywords: ["MEDIA MARKT", "MEDIAMARKT", "APPLE.COM", "APPLE COM", "GOOGLE"],
+  },
+  {
+    category: "Sigorta",
+    keywords: ["SIGORTA", "EUREKO", "AXA", "EMEKLILIK"],
+  },
+  {
+    category: "Kisisel Hizmet",
+    keywords: ["VETERINER", "KLINIGI", "KUAFOR"],
   },
   {
     category: "Egitim",

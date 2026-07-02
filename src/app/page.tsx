@@ -473,13 +473,13 @@ export default function Home() {
           <form onSubmit={previewPdf} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               <FileUp size={18} />
-              <h2 className="text-base font-semibold">PDF ekstre yukle</h2>
+              <h2 className="text-base font-semibold">Ekstre yukle</h2>
             </div>
             <div className="space-y-3">
               <input
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 type="file"
-                accept="application/pdf"
+                accept="application/pdf,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
               />
               <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
@@ -492,7 +492,7 @@ export default function Home() {
           {previewRows.length ? (
             <div className="rounded-md border border-slate-200 bg-white p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">PDF onizleme</h2>
+                <h2 className="text-base font-semibold">Ekstre onizleme</h2>
                 <button
                   className="h-9 rounded-md bg-teal-700 px-3 text-sm font-medium text-white hover:bg-teal-800"
                   onClick={importPdf}
