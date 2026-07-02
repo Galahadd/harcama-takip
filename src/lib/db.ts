@@ -34,7 +34,11 @@ function sql() {
   if (!client) {
     client = postgres(databaseUrl, {
       ssl: databaseUrl.includes("sslmode=disable") ? false : "require",
-      max: 3,
+      max: 1,
+      idle_timeout: 20,
+      connect_timeout: 10,
+      max_lifetime: 60 * 10,
+      prepare: false,
     });
   }
 
@@ -43,6 +47,11 @@ function sql() {
 
 export async function ensureSchema() {
   if (schemaReady) {
+    return;
+  }
+
+  if (process.env.SKIP_SCHEMA_SETUP === "1") {
+    schemaReady = true;
     return;
   }
 
