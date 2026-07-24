@@ -122,13 +122,20 @@ async function prepareSchema() {
       month integer not null check (month between 1 and 12),
       year integer not null check (year between 2000 and 2100),
       grams numeric(10,4) not null check (grams > 0),
+      gold_type text not null default 'gram_24',
+      quantity numeric(10,4) not null default 1 check (quantity > 0),
+      carat integer not null default 24 check (carat in (22, 24)),
       price_per_gram numeric(12,2),
       note text,
-      created_at timestamptz not null default now(),
-      unique(month, year)
+      created_at timestamptz not null default now()
     )
   `;
   await db`alter table gold_entries add column if not exists price_per_gram numeric(12,2)`;
+  await db`alter table gold_entries add column if not exists gold_type text not null default 'gram_24'`;
+  await db`alter table gold_entries add column if not exists quantity numeric(10,4) not null default 1`;
+  await db`alter table gold_entries add column if not exists carat integer not null default 24`;
+  await db`update gold_entries set quantity = grams where gold_type = 'gram_24' and quantity = 1 and grams <> 1`;
+  await db`alter table gold_entries drop constraint if exists gold_entries_month_year_key`;
 
   schemaReady = true;
   schemaPromise = null;
@@ -676,6 +683,9 @@ function mapGoldEntry(row: Record<string, unknown>): GoldEntry {
     id: String(row.id),
     month: Number(row.month),
     year: Number(row.year),
+    goldType: String(row.gold_type ?? "gram_24") as GoldEntry["goldType"],
+    quantity: Number(row.quantity ?? row.grams),
+    carat: Number(row.carat ?? 24) as GoldEntry["carat"],
     grams: Number(row.grams),
     pricePerGram: row.price_per_gram !== null && row.price_per_gram !== undefined ? Number(row.price_per_gram) : null,
     note: row.note ? String(row.note) : null,
@@ -694,18 +704,26 @@ export async function listGoldEntries(): Promise<GoldEntry[]> {
 export async function upsertGoldEntry(input: {
   month: number;
   year: number;
+  goldType: GoldEntry["goldType"];
+  quantity: number;
+  carat: GoldEntry["carat"];
   grams: number;
   pricePerGram?: number | null;
   note?: string | null;
 }): Promise<GoldEntry> {
   await ensureSchema();
   const rows = await sql()`
-    insert into gold_entries (month, year, grams, price_per_gram, note)
-    values (${input.month}, ${input.year}, ${input.grams}, ${input.pricePerGram ?? null}, ${input.note ?? null})
-    on conflict (month, year) do update
-      set grams = excluded.grams,
-          price_per_gram = excluded.price_per_gram,
-          note = excluded.note
+    insert into gold_entries (month, year, gold_type, quantity, carat, grams, price_per_gram, note)
+    values (
+      ${input.month},
+      ${input.year},
+      ${input.goldType},
+      ${input.quantity},
+      ${input.carat},
+      ${input.grams},
+      ${input.pricePerGram ?? null},
+      ${input.note ?? null}
+    )
     returning *
   `;
   return mapGoldEntry(rows[0]);

@@ -3,8 +3,28 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Calculator, LogOut, Plus, RefreshCcw, Trash2, TrendingUp, WalletCards } from "lucide-react";
 import { currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
-import type { GoldEntry } from "@/lib/types";
+import type { GoldEntry, GoldType } from "@/lib/types";
 import Link from "next/link";
+
+const GOLD_OPTIONS: Array<{
+  value: GoldType;
+  label: string;
+  unit: "gr" | "adet";
+  gramsPerUnit?: number;
+  carat: 22 | 24 | null;
+}> = [
+  { value: "gram_24", label: "Gram altın (24 ayar)", unit: "gr", carat: 24 },
+  { value: "gram_22", label: "Gram altın (22 ayar)", unit: "gr", carat: 22 },
+  { value: "bracelet_22", label: "Takı / bilezik", unit: "gr", carat: null },
+  { value: "quarter", label: "Çeyrek altın", unit: "adet", gramsPerUnit: 1.754, carat: 22 },
+  { value: "half", label: "Yarım altın", unit: "adet", gramsPerUnit: 3.508, carat: 22 },
+  { value: "full", label: "Tam altın", unit: "adet", gramsPerUnit: 7.016, carat: 22 },
+  { value: "republic", label: "Cumhuriyet altını", unit: "adet", gramsPerUnit: 7.216, carat: 22 },
+];
+
+function getGoldOption(type: GoldType) {
+  return GOLD_OPTIONS.find((option) => option.value === type) ?? GOLD_OPTIONS[0];
+}
 
 export default function YatirimlarPage() {
   const current = currentMonthOption();
@@ -14,11 +34,14 @@ export default function YatirimlarPage() {
   const [form, setForm] = useState({
     month: current.month,
     year: current.year,
-    grams: "",
+    goldType: "gram_24" as GoldType,
+    jewelryCarat: 22 as 22 | 24,
+    quantity: "",
     pricePerGram: "",
     note: "",
   });
-  const [livePrice, setLivePrice] = useState("");
+  const [livePrice24, setLivePrice24] = useState("");
+  const [livePrice22, setLivePrice22] = useState("");
 
   async function loadEntries() {
     setLoading(true);
@@ -45,7 +68,9 @@ export default function YatirimlarPage() {
       body: JSON.stringify({
         month: Number(form.month),
         year: Number(form.year),
-        grams: Number(form.grams),
+        goldType: form.goldType,
+        carat: form.goldType === "bracelet_22" ? form.jewelryCarat : undefined,
+        quantity: Number(form.quantity),
         pricePerGram: form.pricePerGram ? Number(form.pricePerGram) : null,
         note: form.note.trim() || null,
       }),
@@ -56,7 +81,15 @@ export default function YatirimlarPage() {
       return;
     }
     setMessage("Kayit eklendi.");
-    setForm({ month: current.month, year: current.year, grams: "", pricePerGram: "", note: "" });
+    setForm({
+      month: current.month,
+      year: current.year,
+      goldType: "gram_24",
+      jewelryCarat: 22,
+      quantity: "",
+      pricePerGram: "",
+      note: "",
+    });
     await loadEntries();
   }
 
@@ -82,14 +115,27 @@ export default function YatirimlarPage() {
   }
 
   const totalGrams = entries.reduce((sum, e) => sum + e.grams, 0);
-  const livePriceNum = livePrice ? Number(livePrice.replace(",", ".")) : null;
-  const totalCurrentValue = livePriceNum ? totalGrams * livePriceNum : null;
+  const total24Grams = entries
+    .filter((entry) => entry.carat === 24)
+    .reduce((sum, entry) => sum + entry.grams, 0);
+  const total22Grams = entries
+    .filter((entry) => entry.carat === 22)
+    .reduce((sum, entry) => sum + entry.grams, 0);
+  const livePrice24Num = livePrice24 ? Number(livePrice24.replace(",", ".")) : null;
+  const livePrice22Num = livePrice22 ? Number(livePrice22.replace(",", ".")) : null;
+  const hasAllRequiredLivePrices =
+    (total24Grams === 0 || (livePrice24Num !== null && livePrice24Num > 0)) &&
+    (total22Grams === 0 || (livePrice22Num !== null && livePrice22Num > 0));
+  const totalCurrentValue = hasAllRequiredLivePrices
+    ? total24Grams * (livePrice24Num ?? 0) + total22Grams * (livePrice22Num ?? 0)
+    : null;
   const totalCostValue = entries.reduce((sum, e) => {
     if (e.pricePerGram !== null) return sum + e.grams * e.pricePerGram;
     return sum;
   }, 0);
   const hasAnyCost = entries.some((e) => e.pricePerGram !== null);
   const profitLoss = totalCurrentValue !== null && hasAnyCost ? totalCurrentValue - totalCostValue : null;
+  const selectedGold = getGoldOption(form.goldType);
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
@@ -101,7 +147,7 @@ export default function YatirimlarPage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold">Yatirimlar</h1>
-              <p className="text-sm text-slate-500">Gram altin takibi</p>
+              <p className="text-sm text-slate-500">24 ve 22 ayar altın takibi</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -150,6 +196,10 @@ export default function YatirimlarPage() {
               <p className="mt-2 text-2xl font-semibold">
                 {totalGrams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
               </p>
+              <p className="mt-1 text-xs text-slate-400">
+                24 ayar: {total24Grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr · 22
+                ayar: {total22Grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
+              </p>
             </div>
             <div className="rounded-md border border-slate-200 bg-white p-5">
               <p className="text-sm text-slate-500">Maliyet toplami</p>
@@ -190,7 +240,10 @@ export default function YatirimlarPage() {
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-5 py-3 font-medium">Ay</th>
-                    <th className="px-5 py-3 text-right font-medium">Gram</th>
+                    <th className="px-5 py-3 font-medium">Altın türü</th>
+                    <th className="px-5 py-3 text-right font-medium">Miktar</th>
+                    <th className="px-5 py-3 text-right font-medium">Gram karşılığı</th>
+                    <th className="px-5 py-3 text-right font-medium">Ayar</th>
                     <th className="px-5 py-3 text-right font-medium">Alis fiyati / gr</th>
                     <th className="px-5 py-3 text-right font-medium">Maliyet</th>
                     <th className="px-5 py-3 text-right font-medium">Guncel deger</th>
@@ -200,16 +253,25 @@ export default function YatirimlarPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {entries.map((entry) => {
+                    const option = getGoldOption(entry.goldType);
                     const cost = entry.pricePerGram !== null ? entry.grams * entry.pricePerGram : null;
-                    const current = livePriceNum !== null ? entry.grams * livePriceNum : null;
+                    const currentPrice = entry.carat === 24 ? livePrice24Num : livePrice22Num;
+                    const current =
+                      currentPrice !== null && currentPrice > 0 ? entry.grams * currentPrice : null;
                     return (
                       <tr key={entry.id} className="hover:bg-slate-50">
                         <td className="whitespace-nowrap px-5 py-3 font-medium">
                           {formatMonth(entry.month, entry.year)}
                         </td>
+                        <td className="whitespace-nowrap px-5 py-3">{option.label}</td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right">
+                          {entry.quantity.toLocaleString("tr-TR", { maximumFractionDigits: 4 })}{" "}
+                          {option.unit}
+                        </td>
                         <td className="whitespace-nowrap px-5 py-3 text-right">
                           {entry.grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
                         </td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right">{entry.carat} ayar</td>
                         <td className="whitespace-nowrap px-5 py-3 text-right text-slate-600">
                           {entry.pricePerGram !== null ? formatCurrency(entry.pricePerGram) : "—"}
                         </td>
@@ -250,18 +312,29 @@ export default function YatirimlarPage() {
               <h2 className="text-base font-semibold text-amber-800">Anlik hesaplama</h2>
             </div>
             <p className="mb-3 text-xs text-amber-700">
-              Guncel gram altin fiyatini girin, toplam degeriniz hesaplansin.
+              24 ve 22 ayar güncel gram fiyatlarını girin; her kayıt kendi ayarıyla hesaplansın.
             </p>
-            <input
-              className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Guncel gram fiyati (TRY)"
-              value={livePrice}
-              onChange={(e) => setLivePrice(e.target.value)}
-            />
-            {livePriceNum !== null && livePriceNum > 0 ? (
+            <div className="space-y-2">
+              <input
+                className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="24 ayar gram fiyatı (TRY)"
+                value={livePrice24}
+                onChange={(e) => setLivePrice24(e.target.value)}
+              />
+              <input
+                className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="22 ayar gram fiyatı (TRY)"
+                value={livePrice22}
+                onChange={(e) => setLivePrice22(e.target.value)}
+              />
+            </div>
+            {totalCurrentValue !== null ? (
               <div className="mt-3 space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-amber-700">Toplam gram</span>
@@ -269,7 +342,7 @@ export default function YatirimlarPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-amber-700">Toplam deger</span>
-                  <span className="font-semibold">{formatCurrency(totalGrams * livePriceNum)}</span>
+                  <span className="font-semibold">{formatCurrency(totalCurrentValue)}</span>
                 </div>
                 {hasAnyCost ? (
                   <div className={`flex justify-between font-semibold ${profitLoss !== null && profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
@@ -308,16 +381,57 @@ export default function YatirimlarPage() {
                   onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
                 />
               </div>
+              <select
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                value={form.goldType}
+                onChange={(e) =>
+                  setForm({ ...form, goldType: e.target.value as GoldType, quantity: "" })
+                }
+              >
+                {GOLD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                    {option.gramsPerUnit ? ` (${option.gramsPerUnit} gr/adet)` : ""}
+                  </option>
+                ))}
+              </select>
+              {form.goldType === "bracelet_22" ? (
+                <select
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={form.jewelryCarat}
+                  onChange={(e) =>
+                    setForm({ ...form, jewelryCarat: Number(e.target.value) as 22 | 24 })
+                  }
+                  aria-label="Takı ayarı"
+                >
+                  <option value={22}>22 ayar</option>
+                  <option value={24}>24 ayar</option>
+                </select>
+              ) : null}
               <input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="number"
-                min="0.0001"
-                step="0.0001"
-                placeholder="Gram (orn: 1.5)"
-                value={form.grams}
-                onChange={(e) => setForm({ ...form, grams: e.target.value })}
+                min={selectedGold.unit === "adet" ? "1" : "0.0001"}
+                step={selectedGold.unit === "adet" ? "1" : "0.0001"}
+                placeholder={selectedGold.unit === "adet" ? "Adet" : "Gram (örn: 1,5)"}
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                 required
               />
+              {selectedGold.gramsPerUnit && form.quantity ? (
+                <p className="text-xs text-slate-500">
+                  Gram karşılığı:{" "}
+                  {(Number(form.quantity) * selectedGold.gramsPerUnit).toLocaleString("tr-TR", {
+                    maximumFractionDigits: 4,
+                  })}{" "}
+                  gr · {selectedGold.carat} ayar
+                </p>
+              ) : form.goldType === "bracelet_22" && form.quantity ? (
+                <p className="text-xs text-slate-500">
+                  {Number(form.quantity).toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr ·{" "}
+                  {form.jewelryCarat} ayar
+                </p>
+              ) : null}
               <input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="number"
@@ -339,7 +453,7 @@ export default function YatirimlarPage() {
               </button>
             </div>
             <p className="mt-3 text-xs text-slate-400">
-              Ayni ay icin tekrar kayit eklerseniz mevcut kayit guncellenir.
+              Aynı ay için farklı türlerde veya birden fazla altın kaydı ekleyebilirsiniz.
             </p>
           </form>
         </aside>

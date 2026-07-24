@@ -108,10 +108,22 @@ export type InstallmentSummary = {
   maxMonthlyTotal: number;
 };
 
+export type GoldType =
+  | "gram_24"
+  | "gram_22"
+  | "bracelet_22"
+  | "quarter"
+  | "half"
+  | "full"
+  | "republic";
+
 export type GoldEntry = {
   id: string;
   month: number;
   year: number;
+  goldType: GoldType;
+  quantity: number;
+  carat: 22 | 24;
   grams: number;
   pricePerGram: number | null;
   note: string | null;
