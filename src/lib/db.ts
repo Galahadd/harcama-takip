@@ -251,7 +251,7 @@ async function listProjectedInstallmentRowsForMonth(month: number, year: number,
             and (${targetIndex} - (statements.year * 12 + statements.month - 1)) between 1 and (expenses.installment_total - expenses.installment_current)
         `;
 
-  return rows;
+  return dedupeInstallmentSnapshots(rows);
 }
 
 async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex: number, bank?: string) {
@@ -281,7 +281,7 @@ async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex
             and ((statements.year * 12 + statements.month - 1) + (expenses.installment_total - expenses.installment_current)) >= ${startIndex}
         `;
 
-  return rows;
+  return dedupeInstallmentSnapshots(rows);
 }
 
 async function listProjectedExpensesForMonth(month: number, year: number, bank?: string) {
@@ -350,7 +350,12 @@ export async function listExpenses(month: number, year: number, bank?: string) {
         `;
   const expenses = rows.map(mapExpense);
   const projectedExpenses = await listProjectedExpensesForMonth(month, year, bank);
-  return [...expenses, ...projectedExpenses].sort((a, b) => {
+  const uniqueProjectedExpenses = projectedExpenses.filter(
+    (projected, index, allProjected) =>
+      !expenses.some((expense) => sameInstallmentOccurrence(projected, expense)) &&
+      allProjected.findIndex((candidate) => sameInstallmentOccurrence(projected, candidate)) === index,
+  );
+  return [...expenses, ...uniqueProjectedExpenses].sort((a, b) => {
     const dateDiff = b.date.localeCompare(a.date);
     return dateDiff || b.createdAt.localeCompare(a.createdAt);
   });
@@ -366,6 +371,78 @@ function addMonths(month: number, year: number, offset: number) {
 
 function monthIndex(month: number, year: number) {
   return year * 12 + month - 1;
+}
+
+function normalizeInstallmentDescription(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLocaleUpperCase("tr-TR")
+    .replace(/\s+/g, " ");
+}
+
+function amountsMatch(left: unknown, right: unknown) {
+  return Math.abs(Number(left) - Number(right)) <= 0.05;
+}
+
+function sameInstallmentChain(left: Record<string, unknown>, right: Record<string, unknown>) {
+  if (
+    String(left.bank) !== String(right.bank) ||
+    normalizeInstallmentDescription(left.description) !== normalizeInstallmentDescription(right.description) ||
+    Number(left.installment_total) !== Number(right.installment_total) ||
+    !amountsMatch(left.amount, right.amount)
+  ) {
+    return false;
+  }
+
+  const leftOriginalAmount = left.installment_original_amount;
+  const rightOriginalAmount = right.installment_original_amount;
+  return (
+    leftOriginalAmount === null ||
+    leftOriginalAmount === undefined ||
+    rightOriginalAmount === null ||
+    rightOriginalAmount === undefined ||
+    amountsMatch(leftOriginalAmount, rightOriginalAmount)
+  );
+}
+
+function dedupeInstallmentSnapshots(rows: Record<string, unknown>[]) {
+  const latestFirst = [...rows].sort((left, right) => {
+    const statementDiff =
+      monthIndex(Number(right.statement_month), Number(right.statement_year)) -
+      monthIndex(Number(left.statement_month), Number(left.statement_year));
+    if (statementDiff !== 0) return statementDiff;
+
+    const installmentDiff = Number(right.installment_current) - Number(left.installment_current);
+    if (installmentDiff !== 0) return installmentDiff;
+
+    return String(right.created_at).localeCompare(String(left.created_at));
+  });
+
+  return latestFirst.filter(
+    (row, index, allRows) => allRows.findIndex((candidate) => sameInstallmentChain(row, candidate)) === index,
+  );
+}
+
+function sameInstallmentOccurrence(left: Expense, right: Expense) {
+  if (
+    left.installmentCurrent === null ||
+    right.installmentCurrent === null ||
+    left.installmentTotal === null ||
+    right.installmentTotal === null
+  ) {
+    return false;
+  }
+
+  return (
+    left.bank === right.bank &&
+    normalizeInstallmentDescription(left.description) === normalizeInstallmentDescription(right.description) &&
+    left.installmentCurrent === right.installmentCurrent &&
+    left.installmentTotal === right.installmentTotal &&
+    amountsMatch(left.amount, right.amount) &&
+    (left.installmentOriginalAmount === null ||
+      right.installmentOriginalAmount === null ||
+      amountsMatch(left.installmentOriginalAmount, right.installmentOriginalAmount))
+  );
 }
 
 export async function listFutureInstallments(
