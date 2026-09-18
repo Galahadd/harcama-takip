@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Calculator, LogOut, Plus, RefreshCcw, Trash2, TrendingUp, WalletCards } from "lucide-react";
 import { currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import type { GoldEntry, GoldType } from "@/lib/types";
+import { goldEntryValue, goldPortfolioTotals, type GoldPrices } from "@/lib/gold-prices";
 import Link from "next/link";
 
 const GOLD_OPTIONS: Array<{
@@ -40,23 +41,45 @@ export default function YatirimlarPage() {
     pricePerGram: "",
     note: "",
   });
-  const [livePrice24, setLivePrice24] = useState("");
-  const [livePrice22, setLivePrice22] = useState("");
+  const [prices, setPrices] = useState<GoldPrices | null>(null);
+  const [pricesLoading, setPricesLoading] = useState(true);
+  const [priceError, setPriceError] = useState("");
+
+  async function loadPrices() {
+    setPricesLoading(true);
+    setPriceError("");
+    try {
+      const res = await fetch("/api/gold/price", { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Altın alış fiyatları alınamadı.");
+      }
+      setPrices(await res.json());
+    } catch (error) {
+      setPrices(null);
+      setPriceError(error instanceof Error ? error.message : "Altın alış fiyatları alınamadı.");
+    } finally {
+      setPricesLoading(false);
+    }
+  }
 
   async function loadEntries() {
     setLoading(true);
-    const res = await fetch("/api/gold");
-    const data = await res.json();
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/gold");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Kayıtlar alınamadı.");
       setEntries(data.entries);
-    } else {
-      setMessage(data.error || "Kayitlar alinamadi.");
+    } catch {
+      setMessage("Kayıtlar alınamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
     loadEntries();
+    loadPrices();
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -121,20 +144,9 @@ export default function YatirimlarPage() {
   const total22Grams = entries
     .filter((entry) => entry.carat === 22)
     .reduce((sum, entry) => sum + entry.grams, 0);
-  const livePrice24Num = livePrice24 ? Number(livePrice24.replace(",", ".")) : null;
-  const livePrice22Num = livePrice22 ? Number(livePrice22.replace(",", ".")) : null;
-  const hasAllRequiredLivePrices =
-    (total24Grams === 0 || (livePrice24Num !== null && livePrice24Num > 0)) &&
-    (total22Grams === 0 || (livePrice22Num !== null && livePrice22Num > 0));
-  const totalCurrentValue = hasAllRequiredLivePrices
-    ? total24Grams * (livePrice24Num ?? 0) + total22Grams * (livePrice22Num ?? 0)
-    : null;
-  const totalCostValue = entries.reduce((sum, e) => {
-    if (e.pricePerGram !== null) return sum + e.grams * e.pricePerGram;
-    return sum;
-  }, 0);
+  const { cost: totalCostValue, currentValue: totalCurrentValue, profitLoss, missingCostCount } =
+    goldPortfolioTotals(entries, prices);
   const hasAnyCost = entries.some((e) => e.pricePerGram !== null);
-  const profitLoss = totalCurrentValue !== null && hasAnyCost ? totalCurrentValue - totalCostValue : null;
   const selectedGold = getGoldOption(form.goldType);
 
   return (
@@ -166,7 +178,8 @@ export default function YatirimlarPage() {
             </nav>
             <button
               className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={loadEntries}
+              onClick={() => { void loadEntries(); void loadPrices(); }}
+              disabled={loading || pricesLoading}
               title="Yenile"
             >
               <RefreshCcw size={18} />
@@ -183,7 +196,7 @@ export default function YatirimlarPage() {
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[1fr_340px] lg:px-8">
-        <section className="space-y-6">
+        <section className="min-w-0 space-y-6">
           {message ? (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {message}
@@ -216,7 +229,9 @@ export default function YatirimlarPage() {
                 {totalCurrentValue !== null ? formatCurrency(totalCurrentValue) : "—"}
               </p>
               {totalCurrentValue === null ? (
-                <p className="mt-1 text-xs text-slate-400">Anlık fiyat girin →</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {pricesLoading ? "Alış fiyatları yükleniyor…" : "Alış fiyatları alınamadı"}
+                </p>
               ) : null}
             </div>
             <div className={`rounded-md border p-5 ${profitLoss === null ? "border-slate-200 bg-white" : profitLoss >= 0 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
@@ -228,6 +243,11 @@ export default function YatirimlarPage() {
                   ? `${profitLoss >= 0 ? "+" : ""}${formatCurrency(profitLoss)}`
                   : "—"}
               </p>
+              {missingCostCount > 0 ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Alış maliyeti olmayan {missingCostCount} kayıt kâr/zarara dahil edilmedi.
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -246,18 +266,16 @@ export default function YatirimlarPage() {
                     <th className="px-5 py-3 text-right font-medium">Ayar</th>
                     <th className="px-5 py-3 text-right font-medium">Alis fiyati / gr</th>
                     <th className="px-5 py-3 text-right font-medium">Maliyet</th>
-                    <th className="px-5 py-3 text-right font-medium">Guncel deger</th>
                     <th className="px-5 py-3 font-medium">Not</th>
                     <th className="px-5 py-3 text-right font-medium">Islem</th>
+                    <th className="sticky right-0 bg-amber-50 px-5 py-3 text-right font-medium">Güncel değer</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {entries.map((entry) => {
                     const option = getGoldOption(entry.goldType);
                     const cost = entry.pricePerGram !== null ? entry.grams * entry.pricePerGram : null;
-                    const currentPrice = entry.carat === 24 ? livePrice24Num : livePrice22Num;
-                    const current =
-                      currentPrice !== null && currentPrice > 0 ? entry.grams * currentPrice : null;
+                    const current = goldEntryValue(entry, prices);
                     return (
                       <tr key={entry.id} className="hover:bg-slate-50">
                         <td className="whitespace-nowrap px-5 py-3 font-medium">
@@ -278,9 +296,6 @@ export default function YatirimlarPage() {
                         <td className="whitespace-nowrap px-5 py-3 text-right">
                           {cost !== null ? formatCurrency(cost) : "—"}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right font-medium">
-                          {current !== null ? formatCurrency(current) : "—"}
-                        </td>
                         <td className="px-5 py-3 text-slate-500">{entry.note ?? "—"}</td>
                         <td className="whitespace-nowrap px-5 py-3 text-right">
                           <button
@@ -290,6 +305,9 @@ export default function YatirimlarPage() {
                           >
                             <Trash2 size={15} />
                           </button>
+                        </td>
+                        <td className="sticky right-0 whitespace-nowrap bg-amber-50 px-5 py-3 text-right font-semibold">
+                          {current !== null ? formatCurrency(current) : "—"}
                         </td>
                       </tr>
                     );
@@ -309,31 +327,43 @@ export default function YatirimlarPage() {
           <div className="rounded-md border border-amber-200 bg-amber-50 p-5">
             <div className="mb-3 flex items-center gap-2">
               <Calculator size={18} className="text-amber-700" />
-              <h2 className="text-base font-semibold text-amber-800">Anlik hesaplama</h2>
+              <h2 className="text-base font-semibold text-amber-800">Güncel alış fiyatları</h2>
             </div>
             <p className="mb-3 text-xs text-amber-700">
-              24 ve 22 ayar güncel gram fiyatlarını girin; her kayıt kendi ayarıyla hesaplansın.
+              AltinAPI alış fiyatlarıyla her kayıt kendi ayarına ve gram karşılığına göre hesaplanır.
             </p>
             <div className="space-y-2">
-              <input
-                className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="24 ayar gram fiyatı (TRY)"
-                value={livePrice24}
-                onChange={(e) => setLivePrice24(e.target.value)}
-              />
-              <input
-                className="h-10 w-full rounded-md border border-amber-300 bg-white px-3 text-sm"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="22 ayar gram fiyatı (TRY)"
-                value={livePrice22}
-                onChange={(e) => setLivePrice22(e.target.value)}
-              />
+              {([
+                ["24 ayar gram alış", prices?.gram24],
+                ["22 ayar gram alış", prices?.gram22],
+              ] as const).map(([label, quote]) => (
+                <div key={label} className="rounded-md border border-amber-200 bg-white p-3">
+                  <p className="text-xs text-amber-800">{label}</p>
+                  <p className="mt-1 font-semibold">{quote ? `${formatCurrency(quote.bid)} / gr` : "—"}</p>
+                  {quote ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Veri zamanı: {new Date(quote.updatedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={loadPrices}
+                disabled={pricesLoading}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-amber-300 bg-white text-sm text-amber-800 disabled:opacity-50"
+              >
+                <RefreshCcw size={16} className={pricesLoading ? "animate-spin" : ""} />
+                {pricesLoading ? "Fiyatlar yükleniyor…" : "Fiyatları yenile"}
+              </button>
+              <p className="text-xs text-amber-700">Fiyatlar 5 dakika önbellekte tutulur.</p>
             </div>
+            {priceError ? <p role="alert" className="mt-3 text-sm text-red-700">{priceError}</p> : null}
+            {prices?.stale ? (
+              <p role="status" className="mt-3 text-xs text-amber-900">Kaynak verisi güncel değil; hesaplama son alınan alış fiyatlarını kullanıyor.</p>
+            ) : prices?.marketClosed ? (
+              <p className="mt-3 text-xs text-amber-900">Piyasa kapalı; son kayıtlı alış fiyatları kullanılıyor.</p>
+            ) : null}
             {totalCurrentValue !== null ? (
               <div className="mt-3 space-y-1 text-sm">
                 <div className="flex justify-between">

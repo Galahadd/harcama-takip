@@ -1,40 +1,42 @@
 import { NextResponse } from "next/server";
-
-const TROY_OZ_TO_GRAM = 31.1035;
+import { cookies } from "next/headers";
+import { authCookieName, isValidSession } from "@/lib/auth";
+import { parseGoldPrices } from "@/lib/gold-prices";
 
 export async function GET() {
-  try {
-    const [metalRes, fxRes] = await Promise.all([
-      fetch("https://api.metals.live/v1/spot/gold", { next: { revalidate: 3600 } }),
-      fetch("https://open.er-api.com/v6/latest/USD", { next: { revalidate: 3600 } }),
-    ]);
+  const session = (await cookies()).get(authCookieName)?.value;
+  if (!(await isValidSession(session))) {
+    return NextResponse.json({ error: "Fiyatları görmek için giriş yapın." }, { status: 401 });
+  }
 
-    if (!metalRes.ok || !fxRes.ok) {
-      throw new Error("Fiyat verisi alinamadi.");
-    }
-
-    const metalData = (await metalRes.json()) as Array<{ gold: number }>;
-    const fxData = (await fxRes.json()) as { rates: Record<string, number> };
-
-    const pricePerOzUsd: number = metalData[0]?.gold;
-    const usdToTry: number = fxData.rates?.TRY;
-
-    if (!pricePerOzUsd || !usdToTry) {
-      throw new Error("Fiyat verisi eksik.");
-    }
-
-    const pricePerGramTry = (pricePerOzUsd / TROY_OZ_TO_GRAM) * usdToTry;
-
-    return NextResponse.json({
-      pricePerGram: Math.round(pricePerGramTry * 100) / 100,
-      currency: "TRY",
-      source: "metals.live + open.er-api.com",
-      fetchedAt: new Date().toISOString(),
-    });
-  } catch (error) {
+  const apiKey = process.env.ALTINAPI_API_KEY;
+  if (!apiKey) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Altin fiyati alinamadi." },
-      { status: 500 },
+      { error: "Altın fiyat servisi yapılandırılmamış. ALTINAPI_API_KEY tanımlanmalı." },
+      { status: 503 },
+    );
+  }
+  try {
+    const response = await fetch("https://altinapi.com/api/v1/prices", {
+      headers: { "X-API-Key": apiKey },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      const error = response.status === 429
+        ? "Altın fiyat servisi istek limitine ulaştı. Biraz sonra tekrar deneyin."
+        : "Altın fiyat servisine ulaşılamadı. Biraz sonra tekrar deneyin.";
+      return NextResponse.json({ error }, { status: 503 });
+    }
+
+    const prices = parseGoldPrices(await response.json());
+    return NextResponse.json(prices, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    // Never forward provider errors or request headers to the browser.
+    return NextResponse.json(
+      { error: "Geçerli altın alış fiyatları alınamadı. Lütfen tekrar deneyin." },
+      { status: 503 },
     );
   }
 }
