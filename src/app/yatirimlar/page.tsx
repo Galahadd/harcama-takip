@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Calculator, LogOut, Plus, RefreshCcw, Trash2, TrendingUp, WalletCards } from "lucide-react";
+import { Calculator, Plus, RefreshCcw, Trash2 } from "lucide-react";
 import { currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import type { GoldEntry, GoldType } from "@/lib/types";
 import { goldEntryValue, goldPortfolioTotals, type GoldPrices } from "@/lib/gold-prices";
+import { AppShell } from "@/components/app-shell";
 import Link from "next/link";
 
 const GOLD_OPTIONS: Array<{
@@ -44,13 +45,16 @@ export default function YatirimlarPage() {
   const [prices, setPrices] = useState<GoldPrices | null>(null);
   const [pricesLoading, setPricesLoading] = useState(true);
   const [priceError, setPriceError] = useState("");
+  const [requiresLogin, setRequiresLogin] = useState(false);
 
   async function loadPrices() {
     setPricesLoading(true);
     setPriceError("");
+    setRequiresLogin(false);
     try {
       const res = await fetch("/api/gold/price", { cache: "no-store" });
       if (!res.ok) {
+        setRequiresLogin(res.status === 401);
         const data = await res.json().catch(() => null);
         throw new Error(data?.error || "Altın alış fiyatları alınamadı.");
       }
@@ -132,10 +136,6 @@ export default function YatirimlarPage() {
     await loadEntries();
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
 
   const totalGrams = entries.reduce((sum, e) => sum + e.grams, 0);
   const total24Grams = entries
@@ -150,32 +150,7 @@ export default function YatirimlarPage() {
   const selectedGold = getGoldOption(form.goldType);
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-600 text-white">
-              <TrendingUp size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">Yatirimlar</h1>
-              <p className="text-sm text-slate-500">24 ve 22 ayar altın takibi</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <nav className="flex rounded-md border border-slate-200 bg-white text-sm">
-              <Link
-                href="/"
-                className="flex items-center gap-1.5 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-l-md border-r border-slate-200"
-              >
-                <WalletCards size={15} />
-                Harcamalar
-              </Link>
-              <span className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 text-amber-700 font-medium rounded-r-md">
-                <TrendingUp size={15} />
-                Yatirimlar
-              </span>
-            </nav>
+    <AppShell title="Yatırımlar" description="Altın birikimini ve güncel değerini bir bakışta takip et." actions={<>
             <button
               className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               onClick={() => { void loadEntries(); void loadPrices(); }}
@@ -184,18 +159,11 @@ export default function YatirimlarPage() {
             >
               <RefreshCcw size={18} />
             </button>
-            <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={logout}
-              title="Cikis"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </div>
-      </header>
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[1fr_340px] lg:px-8">
+      </>}>
+
+
+      <div className="dashboard-grid">
         <section className="min-w-0 space-y-6">
           {message ? (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -203,7 +171,7 @@ export default function YatirimlarPage() {
             </div>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
             <div className="rounded-md border border-slate-200 bg-white p-5">
               <p className="text-sm text-slate-500">Toplam gram</p>
               <p className="mt-2 text-2xl font-semibold">
@@ -215,7 +183,7 @@ export default function YatirimlarPage() {
               </p>
             </div>
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Maliyet toplami</p>
+              <p className="text-sm text-slate-500">Toplam alış maliyeti</p>
               <p className="mt-2 text-2xl font-semibold">
                 {hasAnyCost ? formatCurrency(totalCostValue) : "—"}
               </p>
@@ -224,7 +192,7 @@ export default function YatirimlarPage() {
               ) : null}
             </div>
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Guncel deger</p>
+              <p className="text-sm text-slate-500">Güncel değer</p>
               <p className="mt-2 text-2xl font-semibold">
                 {totalCurrentValue !== null ? formatCurrency(totalCurrentValue) : "—"}
               </p>
@@ -236,7 +204,7 @@ export default function YatirimlarPage() {
             </div>
             <div className={`rounded-md border p-5 ${profitLoss === null ? "border-slate-200 bg-white" : profitLoss >= 0 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
               <p className={`text-sm ${profitLoss === null ? "text-slate-500" : profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
-                Kar / Zarar
+                Kâr / Zarar
               </p>
               <p className={`mt-2 text-2xl font-semibold ${profitLoss === null ? "text-slate-950" : profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
                 {profitLoss !== null
@@ -253,7 +221,7 @@ export default function YatirimlarPage() {
 
           <div className="rounded-md border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-base font-semibold">Altin kayitlari</h2>
+              <h2 className="text-base font-semibold">Altın varlıklarım</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
@@ -264,10 +232,10 @@ export default function YatirimlarPage() {
                     <th className="px-5 py-3 text-right font-medium">Miktar</th>
                     <th className="px-5 py-3 text-right font-medium">Gram karşılığı</th>
                     <th className="px-5 py-3 text-right font-medium">Ayar</th>
-                    <th className="px-5 py-3 text-right font-medium">Alis fiyati / gr</th>
+                    <th className="px-5 py-3 text-right font-medium">Alış fiyatı / gr</th>
                     <th className="px-5 py-3 text-right font-medium">Maliyet</th>
                     <th className="px-5 py-3 font-medium">Not</th>
-                    <th className="px-5 py-3 text-right font-medium">Islem</th>
+                    <th className="px-5 py-3 text-right font-medium">İşlem</th>
                     <th className="sticky right-0 bg-amber-50 px-5 py-3 text-right font-medium">Güncel değer</th>
                   </tr>
                 </thead>
@@ -316,7 +284,7 @@ export default function YatirimlarPage() {
               </table>
               {!entries.length && !loading ? (
                 <div className="px-5 py-8 text-center text-sm text-slate-500">
-                  Henuz altin kaydi yok.
+                  Henüz bir altın kaydı yok. İlk birikimini ekleyerek başla.
                 </div>
               ) : null}
             </div>
@@ -359,6 +327,9 @@ export default function YatirimlarPage() {
               <p className="text-xs text-amber-700">Fiyatlar 5 dakika önbellekte tutulur.</p>
             </div>
             {priceError ? <p role="alert" className="mt-3 text-sm text-red-700">{priceError}</p> : null}
+            {requiresLogin ? (
+              <Link href="/login" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-amber-600 text-sm font-medium text-white">Yeniden giriş yap</Link>
+            ) : null}
             {prices?.stale ? (
               <p role="status" className="mt-3 text-xs text-amber-900">Kaynak verisi güncel değil; hesaplama son alınan alış fiyatlarını kullanıyor.</p>
             ) : prices?.marketClosed ? (
@@ -376,7 +347,7 @@ export default function YatirimlarPage() {
                 </div>
                 {hasAnyCost ? (
                   <div className={`flex justify-between font-semibold ${profitLoss !== null && profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
-                    <span>Kar / Zarar</span>
+                    <span>Kâr / Zarar</span>
                     <span>{profitLoss !== null ? `${profitLoss >= 0 ? "+" : ""}${formatCurrency(profitLoss)}` : "—"}</span>
                   </div>
                 ) : null}
@@ -387,11 +358,11 @@ export default function YatirimlarPage() {
           <form onSubmit={handleSubmit} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               <Plus size={18} />
-              <h2 className="text-base font-semibold">Altin ekle</h2>
+              <h2 className="text-base font-semibold">Altın ekle</h2>
             </div>
             <div className="space-y-3">
               <div className="grid grid-cols-[1fr_96px] gap-2">
-                <select
+                <label className="block min-w-0"><span className="form-label">Ay</span><select
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                   value={form.month}
                   onChange={(e) => setForm({ ...form, month: Number(e.target.value) })}
@@ -401,17 +372,17 @@ export default function YatirimlarPage() {
                       {formatMonth(m, form.year).replace(` ${form.year}`, "")}
                     </option>
                   ))}
-                </select>
-                <input
+                </select></label>
+                <label className="block min-w-0"><span className="form-label">Yıl</span><input
                   className="h-10 rounded-md border border-slate-300 px-3 text-sm"
                   type="number"
                   min="2000"
                   max="2100"
                   value={form.year}
                   onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
-                />
+                /></label>
               </div>
-              <select
+              <label className="block min-w-0"><span className="form-label">Altın türü</span><select
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                 value={form.goldType}
                 onChange={(e) =>
@@ -424,9 +395,9 @@ export default function YatirimlarPage() {
                     {option.gramsPerUnit ? ` (${option.gramsPerUnit} gr/adet)` : ""}
                   </option>
                 ))}
-              </select>
+              </select></label>
               {form.goldType === "bracelet_22" ? (
-                <select
+                <label className="block min-w-0"><span className="form-label">Takı ayarı</span><select
                   className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                   value={form.jewelryCarat}
                   onChange={(e) =>
@@ -436,9 +407,9 @@ export default function YatirimlarPage() {
                 >
                   <option value={22}>22 ayar</option>
                   <option value={24}>24 ayar</option>
-                </select>
+                </select></label>
               ) : null}
-              <input
+              <label className="block min-w-0"><span className="form-label">Miktar</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="number"
                 min={selectedGold.unit === "adet" ? "1" : "0.0001"}
@@ -447,7 +418,7 @@ export default function YatirimlarPage() {
                 value={form.quantity}
                 onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                 required
-              />
+              /></label>
               {selectedGold.gramsPerUnit && form.quantity ? (
                 <p className="text-xs text-slate-500">
                   Gram karşılığı:{" "}
@@ -462,21 +433,21 @@ export default function YatirimlarPage() {
                   {form.jewelryCarat} ayar
                 </p>
               ) : null}
-              <input
+              <label className="block min-w-0"><span className="form-label">Alış fiyatı / gram (TL)</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="Alis fiyati / gram (opsiyonel)"
+                placeholder="Alış fiyatı / gram (opsiyonel)"
                 value={form.pricePerGram}
                 onChange={(e) => setForm({ ...form, pricePerGram: e.target.value })}
-              />
-              <input
+              /></label>
+              <label className="block min-w-0"><span className="form-label">Not</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 placeholder="Not (opsiyonel)"
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
-              />
+              /></label>
               <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-medium text-white hover:bg-amber-700">
                 <Plus size={16} />
                 Kaydet
@@ -488,6 +459,6 @@ export default function YatirimlarPage() {
           </form>
         </aside>
       </div>
-    </main>
+    </AppShell>
   );
 }

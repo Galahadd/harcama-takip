@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Aylik Harcama Takibi",
-  description: "Kisisel kredi karti ekstresi ve harcama takip uygulamasi",
+  title: "Hesabım · Kişisel Finans",
+  description: "Harcamaların, ekstrelerin ve altın birikimlerin tek bir yerde.",
 };
 
 export default function RootLayout({

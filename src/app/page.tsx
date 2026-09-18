@@ -10,16 +10,13 @@ import {
 } from "recharts";
 import {
   FileUp,
-  LogOut,
   Pencil,
   Plus,
   RefreshCcw,
   Save,
   Trash2,
-  TrendingUp,
-  WalletCards,
 } from "lucide-react";
-import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
 import clsx from "clsx";
 import { categories, currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import {
@@ -347,10 +344,6 @@ export default function Home() {
     await loadSummary(uploadMonth, uploadYear);
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
-  }
 
   function startEdit(expense: Expense) {
     setEditing(expense);
@@ -363,47 +356,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
-      {completionMessage ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-sm rounded-md bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Içe aktarma tamamlandi</h2>
-            <p className="mt-2 text-sm text-slate-600">{completionMessage}</p>
-            <button
-              className="mt-5 h-10 w-full rounded-md bg-teal-700 text-sm font-medium text-white hover:bg-teal-800"
-              onClick={() => setCompletionMessage("")}
-            >
-              Tamam
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-teal-700 text-white">
-              <WalletCards size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold">Aylik Harcama Takibi</h1>
-              <p className="text-sm text-slate-500">Garanti BBVA ekstreleri ve manuel harcamalar</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <nav className="flex rounded-md border border-slate-200 bg-white text-sm">
-              <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 text-slate-800 font-medium rounded-l-md border-r border-slate-200">
-                <WalletCards size={15} />
-                Harcamalar
-              </span>
-              <Link
-                href="/yatirimlar"
-                className="flex items-center gap-1.5 px-3 py-2 text-slate-600 hover:bg-slate-50 rounded-r-md"
-              >
-                <TrendingUp size={15} />
-                Yatirimlar
-              </Link>
-            </nav>
-            <select
+    <AppShell title="Harcamalar" description="Aylık harcamaların, taksitlerin ve ekstrelerin tek bir yerde." actions={<>
+            <select aria-label="Ay seçimi"
               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
               value={`${selectedYear}-${selectedMonth}`}
               onChange={(event) => {
@@ -420,6 +374,7 @@ export default function Home() {
             </select>
             <select
               className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+              aria-label="Banka filtresi"
               value={selectedBank}
               onChange={(event) => setSelectedBank(event.target.value)}
             >
@@ -436,19 +391,26 @@ export default function Home() {
             >
               <RefreshCcw size={18} />
             </button>
+
+      </>}>
+      {completionMessage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="w-full max-w-sm rounded-md bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold">İçe aktarma tamamlandı</h2>
+            <p className="mt-2 text-sm text-slate-600">{completionMessage}</p>
             <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={logout}
-              title="Cikis"
+              className="mt-5 h-10 w-full rounded-md bg-teal-700 text-sm font-medium text-white hover:bg-teal-800"
+              onClick={() => setCompletionMessage("")}
             >
-              <LogOut size={18} />
+              Tamam
             </button>
           </div>
         </div>
-      </header>
+      ) : null}
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[1fr_380px] lg:px-8">
-        <section className="space-y-6">
+
+      <div className="dashboard-grid">
+        <section className="min-w-0 space-y-6">
           {message ? (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {message}
@@ -457,7 +419,7 @@ export default function Home() {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Secili ay</p>
+              <p className="text-sm text-slate-500">Seçili dönem</p>
               <p className="mt-2 text-2xl font-semibold">{formatMonth(selectedMonth, selectedYear)}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-white p-5">
@@ -465,14 +427,14 @@ export default function Home() {
               <p className="mt-2 text-2xl font-semibold">{formatCurrency(summary.total)}</p>
             </div>
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Kayit sayisi</p>
+              <p className="text-sm text-slate-500">İşlem sayısı</p>
               <p className="mt-2 text-2xl font-semibold">{summary.expenses.length}</p>
             </div>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+          <div className="grid gap-6 xl:grid-cols-2">
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h2 className="text-base font-semibold">Sektor dagilimi</h2>
+              <h2 className="text-base font-semibold">Harcama dağılımı</h2>
               <div className="mt-4 h-72">
                 {summary.categoryTotals.length ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -494,14 +456,14 @@ export default function Home() {
                   </ResponsiveContainer>
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                    Bu ay icin veri yok.
+                    Bu ay için henüz veri yok.
                   </div>
                 )}
               </div>
             </div>
 
             <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h2 className="text-base font-semibold">Sektor toplamları</h2>
+              <h2 className="text-base font-semibold">Kategoriler</h2>
               <div className="mt-4 space-y-3">
                 {summary.categoryTotals.map((item, index) => (
                   <div key={item.category} className="grid grid-cols-[1fr_auto] items-center gap-4">
@@ -527,7 +489,7 @@ export default function Home() {
                   </div>
                 ))}
                 {!summary.categoryTotals.length ? (
-                  <p className="text-sm text-slate-500">Henuz sektor toplamı yok.</p>
+                  <p className="text-sm text-slate-500">Bu dönem için kategori verisi bulunmuyor.</p>
                 ) : null}
               </div>
             </div>
@@ -535,19 +497,21 @@ export default function Home() {
 
           <div className="rounded-md border border-slate-200 bg-white">
             <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
-              <h2 className="text-base font-semibold">Harcama listesi</h2>
+              <h2 className="text-base font-semibold">İşlem geçmişi</h2>
               <div className="flex flex-wrap gap-2">
                 <select
                   className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                  aria-label="Sıralama alanı"
                   value={sortKey}
                   onChange={(event) => setSortKey(event.target.value as SortKey)}
                 >
-                  <option value="date">Tarihe gore</option>
-                  <option value="amount">Tutara gore</option>
-                  <option value="category">Sektore gore</option>
+                  <option value="date">Tarihe göre</option>
+                  <option value="amount">Tutara göre</option>
+                  <option value="category">Kategoriye göre</option>
                 </select>
                 <select
                   className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                  aria-label="Sıralama yönü"
                   value={sortDirection}
                   onChange={(event) => setSortDirection(event.target.value as SortDirection)}
                 >
@@ -558,13 +522,13 @@ export default function Home() {
                   className="h-9 rounded-md border border-slate-300 px-3 text-sm hover:bg-slate-50"
                   onClick={deleteSelectedExpenses}
                 >
-                  Secilenleri sil
+                  Seçilenleri sil
                 </button>
                 <button
                   className="h-9 rounded-md border border-red-300 px-3 text-sm text-red-700 hover:bg-red-50"
                   onClick={deleteCurrentMonthExpenses}
                 >
-                  Ayi sil
+                  Ayı sil
                 </button>
               </div>
             </div>
@@ -581,12 +545,12 @@ export default function Home() {
                       />
                     </th>
                     <th className="px-5 py-3 font-medium">Tarih</th>
-                    <th className="px-5 py-3 font-medium">Aciklama</th>
-                    <th className="px-5 py-3 font-medium">Sektor</th>
+                    <th className="px-5 py-3 font-medium">Açıklama</th>
+                    <th className="px-5 py-3 font-medium">Kategori</th>
                     <th className="px-5 py-3 font-medium">Banka</th>
                     <th className="px-5 py-3 text-right font-medium">Tutar</th>
                     <th className="px-5 py-3 font-medium">Kaynak</th>
-                    <th className="px-5 py-3 text-right font-medium">Islem</th>
+                    <th className="px-5 py-3 text-right font-medium">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -672,24 +636,24 @@ export default function Home() {
           <form onSubmit={saveManualExpense} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               {editing ? <Save size={18} /> : <Plus size={18} />}
-              <h2 className="text-base font-semibold">{editing ? "Harcamayi duzenle" : "Manuel harcama"}</h2>
+              <h2 className="text-base font-semibold">{editing ? "Harcamayı düzenle" : "Harcama ekle"}</h2>
             </div>
             <div className="space-y-3">
-              <input
+              <label className="block min-w-0"><span className="form-label">İşlem tarihi</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="date"
                 value={manualForm.date}
                 onChange={(event) => setManualForm({ ...manualForm, date: event.target.value })}
                 required
-              />
-              <input
+              /></label>
+              <label className="block min-w-0"><span className="form-label">Açıklama</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
-                placeholder="Aciklama"
+                placeholder="Açıklama"
                 value={manualForm.description}
                 onChange={(event) => setManualForm({ ...manualForm, description: event.target.value })}
                 required
-              />
-              <input
+              /></label>
+              <label className="block min-w-0"><span className="form-label">Tutar (TL)</span><input
                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                 type="number"
                 min="0"
@@ -698,8 +662,8 @@ export default function Home() {
                 value={manualForm.amount}
                 onChange={(event) => setManualForm({ ...manualForm, amount: event.target.value })}
                 required
-              />
-              <select
+              /></label>
+              <label className="block min-w-0"><span className="form-label">Kategori</span><select
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                 value={manualForm.category}
                 onChange={(event) => setManualForm({ ...manualForm, category: event.target.value })}
@@ -707,7 +671,7 @@ export default function Home() {
                 {categories.map((category) => (
                   <option key={category}>{category}</option>
                 ))}
-              </select>
+              </select></label>
               <div className="flex gap-2">
                 <button className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800">
                   {editing ? <Save size={16} /> : <Plus size={16} />}
@@ -729,7 +693,7 @@ export default function Home() {
           <form onSubmit={previewPdf} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               <FileUp size={18} />
-              <h2 className="text-base font-semibold">Ekstre yukle</h2>
+              <h2 className="text-base font-semibold">Ekstre yükle</h2>
             </div>
             <div className="space-y-3">
               <input
@@ -739,7 +703,7 @@ export default function Home() {
                 onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
               />
               <div className="grid grid-cols-[1fr_96px] gap-2">
-                <select
+                <label className="block min-w-0"><span className="form-label">Ekstre ayı</span><select
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
                   value={uploadMonth}
                   onChange={(event) => setUploadMonth(Number(event.target.value))}
@@ -749,17 +713,17 @@ export default function Home() {
                       {formatMonth(month, uploadYear).replace(` ${uploadYear}`, "")}
                     </option>
                   ))}
-                </select>
-                <input
+                </select></label>
+                <label className="block min-w-0"><span className="form-label">Yıl</span><input
                   className="h-10 rounded-md border border-slate-300 px-3 text-sm"
                   type="number"
                   min="2000"
                   max="2100"
                   value={uploadYear}
                   onChange={(event) => setUploadYear(Number(event.target.value))}
-                />
+                /></label>
               </div>
-              <select
+              <label className="block min-w-0"><span className="form-label">Banka</span><select
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                 value={uploadBank}
                 onChange={(event) => setUploadBank(event.target.value as Bank)}
@@ -769,10 +733,10 @@ export default function Home() {
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </select></label>
               <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
                 <FileUp size={16} />
-                {previewing ? "Okunuyor..." : "Onizleme al"}
+                {previewing ? "Okunuyor..." : "Önizleme al"}
               </button>
             </div>
           </form>
@@ -780,7 +744,7 @@ export default function Home() {
           {previewRows.length ? (
             <div className="rounded-md border border-slate-200 bg-white p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold">Ekstre onizleme</h2>
+                <h2 className="text-base font-semibold">Ekstre önizleme</h2>
                 <button
                   className="h-9 rounded-md bg-teal-700 px-3 text-sm font-medium text-white hover:bg-teal-800"
                   onClick={importPdf}
@@ -823,6 +787,6 @@ export default function Home() {
           ) : null}
         </aside>
       </div>
-    </main>
+    </AppShell>
   );
 }
