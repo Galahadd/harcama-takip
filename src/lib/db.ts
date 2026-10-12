@@ -78,7 +78,14 @@ async function prepareSchema() {
       check (username ~ '^[a-z0-9._-]{3,40}$')
     )
   `;
-  await db`insert into users (username) values ('recep.kaya11'), ('emre.aydin') on conflict do nothing`;
+  await db`create table if not exists app_migrations (name text primary key, applied_at timestamptz not null default now())`;
+  const seedUsers = await db`
+    insert into app_migrations (name) values ('seed-default-users-v1')
+    on conflict do nothing returning name
+  `;
+  if (seedUsers.length) {
+    await db`insert into users (username) values ('recep.kaya11'), ('emre.aydin') on conflict do nothing`;
+  }
   await db`
     create table if not exists statements (
       id uuid primary key default gen_random_uuid(),
@@ -165,7 +172,6 @@ async function prepareSchema() {
   await db`alter table category_rules drop constraint if exists category_rules_pattern_key`;
   await db`create unique index if not exists category_rules_user_pattern_key on category_rules(user_id, pattern)`;
 
-  await db`create table if not exists app_migrations (name text primary key, applied_at timestamptz not null default now())`;
   const transfer = await db`
     insert into app_migrations (name) values ('transfer-emre-gold-v1')
     on conflict do nothing returning name
@@ -226,6 +232,29 @@ export async function createUser(username: string): Promise<AppUser | null> {
     returning username, created_at as "createdAt"
   `;
   return rows[0] ?? null;
+}
+
+export async function renameUser(currentUsername: string, newUsername: string): Promise<boolean> {
+  await ensureSchema();
+  const db = sql();
+
+  return db.begin(async (tx) => {
+    const updated = await tx`
+      update users
+      set username = ${newUsername}
+      where username = ${currentUsername}
+        and not exists (select 1 from users where username = ${newUsername})
+      returning username
+    `;
+
+    if (!updated.length) return false;
+
+    await tx`update statements set user_id = ${newUsername} where user_id = ${currentUsername}`;
+    await tx`update expenses set user_id = ${newUsername} where user_id = ${currentUsername}`;
+    await tx`update gold_entries set user_id = ${newUsername} where user_id = ${currentUsername}`;
+    await tx`update category_rules set user_id = ${newUsername} where user_id = ${currentUsername}`;
+    return true;
+  });
 }
 
 export async function listRules(username: string) {

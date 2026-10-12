@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, ChevronRight, Landmark, LogOut, Menu, Moon, Sun, WalletCards, X } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Landmark, LogOut, Menu, Moon, Settings, Sun, WalletCards, X } from "lucide-react";
 
 const navigation = [
   { href: "/", label: "Harcamalar", icon: WalletCards },
   { href: "/yatirimlar", label: "Yatırımlar", icon: Landmark },
+  { href: "/ayarlar", label: "Ayarlar", icon: Settings },
 ];
 
 export function AppShell({ children, title, description, actions }: {
