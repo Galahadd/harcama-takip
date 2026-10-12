@@ -1,5 +1,5 @@
 export const authCookieName = "expense_session";
-const sessionPayload = "personal-expense-tracker";
+const sessionPrefix = "expense-tracker";
 
 function getSecret() {
   return process.env.AUTH_SECRET || process.env.APP_PASSWORD || "local-dev-secret";
@@ -36,20 +36,39 @@ async function hmacSha256(value: string) {
   return toHex(signature);
 }
 
-export async function signSession() {
-  const signature = await hmacSha256(sessionPayload);
-  return `${sessionPayload}.${signature}`;
+export function normalizeUsername(value: string) {
+  return value.trim().toLocaleLowerCase("tr-TR");
+}
+
+export function isValidUsername(value: string) {
+  return /^[a-z0-9._-]{3,40}$/.test(value);
+}
+
+export async function signSession(username: string) {
+  const payload = `${sessionPrefix}:${normalizeUsername(username)}`;
+  return `${payload}.${await hmacSha256(payload)}`;
+}
+
+export async function getSessionUsername(value?: string) {
+  if (!value) return null;
+  const separator = value.lastIndexOf(".");
+  if (separator < 0) return null;
+  const payload = value.slice(0, separator);
+  const signature = value.slice(separator + 1);
+  if (!payload.startsWith(`${sessionPrefix}:`) || !constantTimeEqual(signature, await hmacSha256(payload))) return null;
+  const username = payload.slice(sessionPrefix.length + 1);
+  return isValidUsername(username) ? username : null;
 }
 
 export async function isValidSession(value?: string) {
-  if (!value) {
-    return false;
-  }
-
-  return constantTimeEqual(value, await signSession());
+  return Boolean(await getSessionUsername(value));
 }
 
-export function isValidPassword(password: string) {
-  const expected = process.env.APP_PASSWORD || "admin";
-  return constantTimeEqual(password, expected);
+export async function getRequestUsername(request: Request) {
+  const cookie = request.headers.get("cookie")
+    ?.split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${authCookieName}=`))
+    ?.slice(authCookieName.length + 1);
+  return getSessionUsername(cookie ? decodeURIComponent(cookie) : undefined);
 }

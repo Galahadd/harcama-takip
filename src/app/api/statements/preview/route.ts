@@ -4,9 +4,12 @@ import { extractPdfText, parseStatementText } from "@/lib/pdf";
 import { parseStatementSpreadsheet } from "@/lib/spreadsheet";
 import type { Bank } from "@/lib/types";
 import { isUploadedFile } from "@/lib/upload";
+import { getRequestUsername } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const formData = await request.formData();
     const file = formData.get("file");
     const bank = String(formData.get("bank") || "unknown") as Bank;
@@ -16,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const rules = await listRules();
+    const rules = await listRules(username);
     const extension = file.name.split(".").pop()?.toLowerCase();
 
     if (extension === "xls" || extension === "xlsx") {

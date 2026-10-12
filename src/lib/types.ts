@@ -1,4 +1,5 @@
 export type ExpenseSource = "pdf" | "manual" | "projected";
+export type AppUser = { username: string; createdAt: string };
 export type Bank = "garanti" | "yapikredi" | "manual" | "unknown";
 
 export type Expense = {

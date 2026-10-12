@@ -1,65 +1,89 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { ArrowRight, Landmark, Plus, ShieldCheck, UserRound } from "lucide-react";
 
 export default function LoginPage() {
-  const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"login" | "create">("login");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function login(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
-
-    const response = await fetch("/api/auth/login", {
+    setMessage("");
+    const normalized = username.trim().toLocaleLowerCase("tr-TR");
+    const response = await fetch(mode === "login" ? "/api/auth/login" : "/api/auth/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username: normalized }),
     });
     const data = await response.json();
     setLoading(false);
-
     if (!response.ok) {
-      setError(data.error || "Giris basarisiz.");
+      setError(data.error || (mode === "login" ? "Giriş başarısız." : "Kullanıcı eklenemedi."));
       return;
     }
-
+    if (mode === "create") {
+      setUsername(normalized);
+      setMode("login");
+      setMessage(`${normalized} oluşturuldu. Şimdi giriş yapabilirsin.`);
+      return;
+    }
     window.location.href = "/";
+  }
+
+  function changeMode(nextMode: "login" | "create") {
+    setMode(nextMode);
+    setError("");
+    setMessage("");
   }
 
   return (
     <main className="workspace login-screen">
-      <form onSubmit={login} className="w-full max-w-sm rounded-md border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-teal-700 text-white">
-            <LockKeyhole size={20} />
-          </div>
+      <section className="login-card" aria-labelledby="login-title">
+        <div className="login-visual" aria-hidden="true">
+          <div className="login-mark"><Landmark size={24} /></div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Hesabım</h1>
-            <p className="text-sm text-slate-500">Kişisel finans alanına hoş geldin.</p>
+            <p className="login-eyebrow">KİŞİSEL FİNANS ALANI</p>
+            <h2>Her hesap,<br />kendi dünyasında.</h2>
+            <p>Harcamalar, ekstreler ve yatırımlar kullanıcılar arasında güvenle ayrılır.</p>
           </div>
+          <div className="login-assurance"><ShieldCheck size={18} /><span>Kayıtların yalnızca seçtiğin hesapta görünür.</span></div>
         </div>
-        <label className="text-sm font-medium" htmlFor="password">
-          Uygulama şifresi
-        </label>
-        <input
-          id="password"
-          className="mt-2 h-11 w-full rounded-md border border-slate-300 px-3 text-sm"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoFocus
-          required
-        />
-        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
-        <button disabled={loading} className="mt-5 h-11 w-full rounded-md bg-teal-700 text-sm font-medium text-white hover:bg-teal-800">
-          {loading ? "Kontrol ediliyor…" : "Giriş yap"}
-        </button>
-        <p className="mt-6 text-center text-xs text-slate-500">Harcamalarını ve birikimlerini tek yerden yönet.</p>
-      </form>
+
+        <div className="login-form-panel">
+          <div className="login-tabs" role="tablist" aria-label="Hesap işlemi">
+            <button type="button" role="tab" aria-selected={mode === "login"} className={mode === "login" ? "is-active" : ""} onClick={() => changeMode("login")}>Giriş yap</button>
+            <button type="button" role="tab" aria-selected={mode === "create"} className={mode === "create" ? "is-active" : ""} onClick={() => changeMode("create")}>Yeni kullanıcı</button>
+          </div>
+          <div className="login-heading">
+            <span className="login-user-icon">{mode === "login" ? <UserRound size={21} /> : <Plus size={21} />}</span>
+            <div>
+              <h1 id="login-title">{mode === "login" ? "Hesabına giriş yap" : "Yeni hesap oluştur"}</h1>
+              <p>{mode === "login" ? "Devam etmek için kullanıcı adını gir." : "Yeni kullanıcı için benzersiz bir ad belirle."}</p>
+            </div>
+          </div>
+          <form onSubmit={submit}>
+            <label htmlFor="username">Kullanıcı adı</label>
+            <div className="login-input-wrap">
+              <UserRound size={17} />
+              <input id="username" type="text" autoComplete="username" placeholder="ör. recep.kaya11" value={username}
+                onChange={(event) => setUsername(event.target.value)} pattern="[A-Za-z0-9._-]{3,40}" minLength={3} maxLength={40} autoFocus required />
+            </div>
+            <p className="login-hint">Harf, rakam, nokta, tire ve alt çizgi kullanabilirsin.</p>
+            {error ? <p role="alert" className="login-feedback error">{error}</p> : null}
+            {message ? <p role="status" className="login-feedback success">{message}</p> : null}
+            <button disabled={loading} className="login-submit">
+              <span>{loading ? "İşleniyor…" : mode === "login" ? "Hesaba geç" : "Kullanıcı oluştur"}</span>
+              {mode === "login" ? <ArrowRight size={17} /> : <Plus size={17} />}
+            </button>
+          </form>
+        </div>
+      </section>
     </main>
   );
 }

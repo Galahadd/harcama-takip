@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { createManualExpense, deleteExpensesByIds, deleteMonthExpenses } from "@/lib/db";
 import { expenseHash } from "@/lib/hash";
 import { isKnownCategory } from "@/lib/categorize";
+import { getRequestUsername } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const body = (await request.json()) as {
       date?: string;
       description?: string;
@@ -22,6 +25,7 @@ export async function POST(request: Request) {
 
     const date = new Date(body.date);
     const expense = await createManualExpense({
+      username,
       date: body.date,
       description: body.description.trim(),
       amount: Number(body.amount),
@@ -47,6 +51,8 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const body = (await request.json().catch(() => ({}))) as {
       ids?: string[];
       month?: number;
@@ -55,12 +61,13 @@ export async function DELETE(request: Request) {
     };
 
     if (Array.isArray(body.ids) && body.ids.length > 0) {
-      const deleted = await deleteExpensesByIds(body.ids);
+      const deleted = await deleteExpensesByIds(username, body.ids);
       return NextResponse.json({ deleted });
     }
 
     if (body.month && body.year) {
       const deleted = await deleteMonthExpenses({
+        username,
         month: Number(body.month),
         year: Number(body.year),
         bank: body.bank,

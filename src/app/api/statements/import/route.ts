@@ -5,9 +5,12 @@ import { expenseHash } from "@/lib/hash";
 import type { ParsedExpense } from "@/lib/types";
 import { isUploadedFile } from "@/lib/upload";
 import type { Bank } from "@/lib/types";
+import { getRequestUsername } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const formData = await request.formData();
     const file = formData.get("file");
     const month = Number(formData.get("month"));
@@ -42,6 +45,7 @@ export async function POST(request: Request) {
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const result = await importStatement({
+      username,
       month,
       year,
       bank,
@@ -55,7 +59,7 @@ export async function POST(request: Request) {
       if (row.category && row.category !== row.suggestedCategory && isKnownCategory(row.category)) {
         const pattern = buildRulePattern(row.description);
         if (pattern) {
-          await upsertRule(pattern, row.category);
+          await upsertRule(username, pattern, row.category);
         }
       }
     }

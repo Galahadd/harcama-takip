@@ -6,6 +6,7 @@ import type {
   Expense,
   FutureInstallment,
   GoldEntry,
+  AppUser,
   InstallmentSummary,
   MonthOption,
   MonthlyInstallmentTotal,
@@ -71,6 +72,14 @@ async function prepareSchema() {
   const db = sql();
   await db`create extension if not exists pgcrypto`;
   await db`
+    create table if not exists users (
+      username text primary key,
+      created_at timestamptz not null default now(),
+      check (username ~ '^[a-z0-9._-]{3,40}$')
+    )
+  `;
+  await db`insert into users (username) values ('recep.kaya11'), ('emre.aydin') on conflict do nothing`;
+  await db`
     create table if not exists statements (
       id uuid primary key default gen_random_uuid(),
       month integer not null check (month between 1 and 12),
@@ -112,7 +121,17 @@ async function prepareSchema() {
     )
   `;
   await db`alter table statements add column if not exists bank text not null default 'unknown'`;
+  await db`alter table statements add column if not exists user_id text`;
+  await db`update statements set user_id = 'recep.kaya11' where user_id is null`;
+  await db`alter table statements alter column user_id set not null`;
+  await db`alter table statements drop constraint if exists statements_month_year_original_file_name_key`;
+  await db`create unique index if not exists statements_user_month_file_key on statements(user_id, month, year, original_file_name)`;
   await db`alter table expenses add column if not exists bank text not null default 'unknown'`;
+  await db`alter table expenses add column if not exists user_id text`;
+  await db`update expenses set user_id = 'recep.kaya11' where user_id is null`;
+  await db`alter table expenses alter column user_id set not null`;
+  await db`alter table expenses drop constraint if exists expenses_duplicate_hash_key`;
+  await db`create unique index if not exists expenses_user_duplicate_key on expenses(user_id, duplicate_hash)`;
   await db`alter table expenses add column if not exists installment_current integer`;
   await db`alter table expenses add column if not exists installment_total integer`;
   await db`alter table expenses add column if not exists installment_original_amount numeric(12,2)`;
@@ -134,8 +153,34 @@ async function prepareSchema() {
   await db`alter table gold_entries add column if not exists gold_type text not null default 'gram_24'`;
   await db`alter table gold_entries add column if not exists quantity numeric(10,4) not null default 1`;
   await db`alter table gold_entries add column if not exists carat integer not null default 24`;
+  await db`alter table gold_entries add column if not exists user_id text`;
+  await db`update gold_entries set user_id = 'recep.kaya11' where user_id is null`;
+  await db`alter table gold_entries alter column user_id set not null`;
   await db`update gold_entries set quantity = grams where gold_type = 'gram_24' and quantity = 1 and grams <> 1`;
   await db`alter table gold_entries drop constraint if exists gold_entries_month_year_key`;
+
+  await db`alter table category_rules add column if not exists user_id text`;
+  await db`update category_rules set user_id = 'recep.kaya11' where user_id is null`;
+  await db`alter table category_rules alter column user_id set not null`;
+  await db`alter table category_rules drop constraint if exists category_rules_pattern_key`;
+  await db`create unique index if not exists category_rules_user_pattern_key on category_rules(user_id, pattern)`;
+
+  await db`create table if not exists app_migrations (name text primary key, applied_at timestamptz not null default now())`;
+  const transfer = await db`
+    insert into app_migrations (name) values ('transfer-emre-gold-v1')
+    on conflict do nothing returning name
+  `;
+  if (transfer.length) {
+    await db`
+      update gold_entries
+      set user_id = 'emre.aydin'
+      where user_id = 'recep.kaya11'
+        and lower(trim(note)) in (
+          'yaren emır bilezik', 'yaren emır yarımlar', 'yaren emır iontegra', 'yaren emır',
+          'yaren emir bilezik', 'yaren emir yarımlar', 'yaren emir iontegra', 'yaren emir'
+        )
+    `;
+  }
 
   schemaReady = true;
   schemaPromise = null;
@@ -161,26 +206,48 @@ function mapExpense(row: Record<string, unknown>): Expense {
   };
 }
 
-export async function listRules() {
+export async function listUsers(): Promise<AppUser[]> {
+  await ensureSchema();
+  const rows = await sql()<AppUser[]>`select username, created_at as "createdAt" from users order by created_at`;
+  return rows;
+}
+
+export async function userExists(username: string) {
+  await ensureSchema();
+  const rows = await sql()`select 1 from users where username = ${username} limit 1`;
+  return rows.length > 0;
+}
+
+export async function createUser(username: string): Promise<AppUser | null> {
+  await ensureSchema();
+  const rows = await sql()<AppUser[]>`
+    insert into users (username) values (${username})
+    on conflict (username) do nothing
+    returning username, created_at as "createdAt"
+  `;
+  return rows[0] ?? null;
+}
+
+export async function listRules(username: string) {
   await ensureSchema();
   const rows = await sql()<CategoryRule[]>`
     select id, pattern, category, created_at as "createdAt"
-    from category_rules
+    from category_rules where user_id = ${username}
     order by created_at desc
   `;
   return rows;
 }
 
-export async function upsertRule(pattern: string, category: string) {
+export async function upsertRule(username: string, pattern: string, category: string) {
   await ensureSchema();
   await sql()`
-    insert into category_rules (pattern, category)
-    values (${pattern}, ${category})
-    on conflict (pattern) do update set category = excluded.category
+    insert into category_rules (user_id, pattern, category)
+    values (${username}, ${pattern}, ${category})
+    on conflict (user_id, pattern) do update set category = excluded.category
   `;
 }
 
-export async function listMonthOptions(): Promise<MonthOption[]> {
+export async function listMonthOptions(username: string): Promise<MonthOption[]> {
   await ensureSchema();
   const rows = await sql()<MonthOption[]>`
     select distinct month, year
@@ -188,14 +255,14 @@ export async function listMonthOptions(): Promise<MonthOption[]> {
       select statements.month, statements.year
       from expenses
       join statements on statements.id = expenses.statement_id
-      where expenses.source = 'pdf'
+      where expenses.source = 'pdf' and expenses.user_id = ${username}
 
       union
 
       select extract(month from expense_date)::int as month,
              extract(year from expense_date)::int as year
       from expenses
-      where source = 'manual'
+      where source = 'manual' and user_id = ${username}
 
       union
 
@@ -215,6 +282,7 @@ export async function listMonthOptions(): Promise<MonthOption[]> {
           expenses.installment_total
         ) as series(installment_number)
         where expenses.source = 'pdf'
+          and expenses.user_id = ${username}
           and expenses.installment_current is not null
           and expenses.installment_total is not null
           and expenses.installment_total > expenses.installment_current
@@ -225,7 +293,7 @@ export async function listMonthOptions(): Promise<MonthOption[]> {
   return rows;
 }
 
-async function listProjectedInstallmentRowsForMonth(month: number, year: number, bank?: string) {
+async function listProjectedInstallmentRowsForMonth(username: string, month: number, year: number, bank?: string) {
   const targetIndex = monthIndex(month, year);
   const rows =
     bank && bank !== "all"
@@ -233,7 +301,7 @@ async function listProjectedInstallmentRowsForMonth(month: number, year: number,
           select expenses.*, statements.month as statement_month, statements.year as statement_year
           from expenses
           join statements on statements.id = expenses.statement_id
-          where expenses.source = 'pdf'
+          where expenses.source = 'pdf' and expenses.user_id = ${username}
             and expenses.installment_current is not null
             and expenses.installment_total is not null
             and expenses.installment_total > expenses.installment_current
@@ -244,7 +312,7 @@ async function listProjectedInstallmentRowsForMonth(month: number, year: number,
           select expenses.*, statements.month as statement_month, statements.year as statement_year
           from expenses
           join statements on statements.id = expenses.statement_id
-          where expenses.source = 'pdf'
+          where expenses.source = 'pdf' and expenses.user_id = ${username}
             and expenses.installment_current is not null
             and expenses.installment_total is not null
             and expenses.installment_total > expenses.installment_current
@@ -254,14 +322,14 @@ async function listProjectedInstallmentRowsForMonth(month: number, year: number,
   return dedupeInstallmentSnapshots(rows);
 }
 
-async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex: number, bank?: string) {
+async function listProjectedInstallmentRowsForRange(username: string, startIndex: number, endIndex: number, bank?: string) {
   const rows =
     bank && bank !== "all"
       ? await sql()`
           select expenses.*, statements.month as statement_month, statements.year as statement_year
           from expenses
           join statements on statements.id = expenses.statement_id
-          where expenses.source = 'pdf'
+          where expenses.source = 'pdf' and expenses.user_id = ${username}
             and expenses.installment_current is not null
             and expenses.installment_total is not null
             and expenses.installment_total > expenses.installment_current
@@ -273,7 +341,7 @@ async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex
           select expenses.*, statements.month as statement_month, statements.year as statement_year
           from expenses
           join statements on statements.id = expenses.statement_id
-          where expenses.source = 'pdf'
+          where expenses.source = 'pdf' and expenses.user_id = ${username}
             and expenses.installment_current is not null
             and expenses.installment_total is not null
             and expenses.installment_total > expenses.installment_current
@@ -284,8 +352,8 @@ async function listProjectedInstallmentRowsForRange(startIndex: number, endIndex
   return dedupeInstallmentSnapshots(rows);
 }
 
-async function listProjectedExpensesForMonth(month: number, year: number, bank?: string) {
-  const rows = await listProjectedInstallmentRowsForMonth(month, year, bank);
+async function listProjectedExpensesForMonth(username: string, month: number, year: number, bank?: string) {
+  const rows = await listProjectedInstallmentRowsForMonth(username, month, year, bank);
   const projectedRows: Record<string, unknown>[] = [];
 
   for (const row of rows) {
@@ -313,7 +381,7 @@ async function listProjectedExpensesForMonth(month: number, year: number, bank?:
   return projectedRows.map(mapExpense);
 }
 
-export async function listExpenses(month: number, year: number, bank?: string) {
+export async function listExpenses(username: string, month: number, year: number, bank?: string) {
   await ensureSchema();
   const rows =
     bank && bank !== "all"
@@ -321,7 +389,7 @@ export async function listExpenses(month: number, year: number, bank?: string) {
           select expenses.*
           from expenses
           left join statements on statements.id = expenses.statement_id
-          where (
+          where expenses.user_id = ${username} and (
               (expenses.source = 'manual'
                 and extract(month from expenses.expense_date)::int = ${month}
                 and extract(year from expenses.expense_date)::int = ${year})
@@ -337,7 +405,7 @@ export async function listExpenses(month: number, year: number, bank?: string) {
           select expenses.*
           from expenses
           left join statements on statements.id = expenses.statement_id
-          where (
+          where expenses.user_id = ${username} and (
               (expenses.source = 'manual'
                 and extract(month from expenses.expense_date)::int = ${month}
                 and extract(year from expenses.expense_date)::int = ${year})
@@ -349,7 +417,7 @@ export async function listExpenses(month: number, year: number, bank?: string) {
           order by expenses.expense_date desc, expenses.created_at desc
         `;
   const expenses = rows.map(mapExpense);
-  const projectedExpenses = await listProjectedExpensesForMonth(month, year, bank);
+  const projectedExpenses = await listProjectedExpensesForMonth(username, month, year, bank);
   const uniqueProjectedExpenses = projectedExpenses.filter(
     (projected, index, allProjected) =>
       !expenses.some((expense) => sameInstallmentOccurrence(projected, expense)) &&
@@ -446,6 +514,7 @@ function sameInstallmentOccurrence(left: Expense, right: Expense) {
 }
 
 export async function listFutureInstallments(
+  username: string,
   month: number,
   year: number,
   bank?: string,
@@ -453,7 +522,7 @@ export async function listFutureInstallments(
   await ensureSchema();
   const startIndex = monthIndex(month, year);
   const endIndex = startIndex + 12;
-  const rows = await listProjectedInstallmentRowsForRange(startIndex, endIndex, bank);
+  const rows = await listProjectedInstallmentRowsForRange(username, startIndex, endIndex, bank);
   const future: FutureInstallment[] = [];
 
   for (const row of rows) {
@@ -490,6 +559,7 @@ export async function listFutureInstallments(
 }
 
 export async function listInstallmentSummary(
+  username: string,
   month: number,
   year: number,
   bank?: string,
@@ -497,7 +567,7 @@ export async function listInstallmentSummary(
   await ensureSchema();
   const startIndex = monthIndex(month, year);
   const endIndex = startIndex + 11;
-  const rows = await listProjectedInstallmentRowsForRange(startIndex, endIndex, bank);
+  const rows = await listProjectedInstallmentRowsForRange(username, startIndex, endIndex, bank);
 
   const activeById = new Map<string, ActiveInstallment>();
   const monthlyByKey = new Map<string, MonthlyInstallmentTotal>();
@@ -585,6 +655,7 @@ export async function listInstallmentSummary(
 }
 
 export async function createManualExpense(input: {
+  username: string;
   date: string;
   description: string;
   amount: number;
@@ -593,14 +664,15 @@ export async function createManualExpense(input: {
 }) {
   await ensureSchema();
   const rows = await sql()`
-    insert into expenses (expense_date, description, amount, category, source, bank, duplicate_hash)
-    values (${input.date}, ${input.description}, ${input.amount}, ${input.category}, 'manual', 'manual', ${input.duplicateHash})
+    insert into expenses (user_id, expense_date, description, amount, category, source, bank, duplicate_hash)
+    values (${input.username}, ${input.date}, ${input.description}, ${input.amount}, ${input.category}, 'manual', 'manual', ${input.duplicateHash})
     returning *
   `;
   return mapExpense(rows[0]);
 }
 
 export async function updateExpense(
+  username: string,
   id: string,
   input: { date: string; description: string; amount: number; category: string },
 ) {
@@ -611,34 +683,34 @@ export async function updateExpense(
         description = ${input.description},
         amount = ${input.amount},
         category = ${input.category}
-    where id = ${id}
+    where id = ${id} and user_id = ${username}
     returning *
   `;
   return rows[0] ? mapExpense(rows[0]) : null;
 }
 
-export async function deleteExpense(id: string) {
+export async function deleteExpense(username: string, id: string) {
   await ensureSchema();
-  await sql()`delete from expenses where id = ${id}`;
+  await sql()`delete from expenses where id = ${id} and user_id = ${username}`;
 }
 
-export async function deleteExpensesByIds(ids: string[]) {
+export async function deleteExpensesByIds(username: string, ids: string[]) {
   await ensureSchema();
   if (!ids.length) {
     return 0;
   }
   const db = sql();
-  const rows = await db`delete from expenses where id in ${db(ids)} returning id`;
+  const rows = await db`delete from expenses where user_id = ${username} and id in ${db(ids)} returning id`;
   return rows.length;
 }
 
-export async function deleteMonthExpenses(input: { month: number; year: number; bank?: string }) {
+export async function deleteMonthExpenses(input: { username: string; month: number; year: number; bank?: string }) {
   await ensureSchema();
   const rows =
     input.bank && input.bank !== "all"
       ? await sql()`
           delete from expenses
-          where (
+          where expenses.user_id = ${input.username} and (
               (expenses.source = 'manual'
                 and extract(month from expenses.expense_date)::int = ${input.month}
                 and extract(year from expenses.expense_date)::int = ${input.year})
@@ -657,7 +729,7 @@ export async function deleteMonthExpenses(input: { month: number; year: number; 
         `
       : await sql()`
           delete from expenses
-          where (
+          where expenses.user_id = ${input.username} and (
               (expenses.source = 'manual'
                 and extract(month from expenses.expense_date)::int = ${input.month}
                 and extract(year from expenses.expense_date)::int = ${input.year})
@@ -677,6 +749,7 @@ export async function deleteMonthExpenses(input: { month: number; year: number; 
 }
 
 export async function importStatement(input: {
+  username: string;
   month: number;
   year: number;
   bank: Bank;
@@ -699,9 +772,9 @@ export async function importStatement(input: {
 
   return db.begin(async (tx) => {
     const statementRows = await tx`
-      insert into statements (month, year, bank, file_path, original_file_name)
-      values (${input.month}, ${input.year}, ${input.bank}, 'postgres://pending', ${input.originalFileName})
-      on conflict (month, year, original_file_name)
+      insert into statements (user_id, month, year, bank, file_path, original_file_name)
+      values (${input.username}, ${input.month}, ${input.year}, ${input.bank}, 'postgres://pending', ${input.originalFileName})
+      on conflict (user_id, month, year, original_file_name)
       do update set uploaded_at = now(), bank = excluded.bank
       returning id
     `;
@@ -729,10 +802,11 @@ export async function importStatement(input: {
     for (const expense of input.expenses) {
       const rows = await tx`
         insert into expenses (
-          statement_id, expense_date, description, amount, category, source, bank,
+          user_id, statement_id, expense_date, description, amount, category, source, bank,
           installment_current, installment_total, installment_original_amount, duplicate_hash
         )
         values (
+          ${input.username},
           ${statementId},
           ${expense.date},
           ${expense.description},
@@ -745,7 +819,7 @@ export async function importStatement(input: {
           ${expense.installmentOriginalAmount ?? null},
           ${expense.duplicateHash}
         )
-        on conflict (duplicate_hash) do nothing
+        on conflict (user_id, duplicate_hash) do nothing
         returning id
       `;
       inserted += rows.length;
@@ -770,15 +844,16 @@ function mapGoldEntry(row: Record<string, unknown>): GoldEntry {
   };
 }
 
-export async function listGoldEntries(): Promise<GoldEntry[]> {
+export async function listGoldEntries(username: string): Promise<GoldEntry[]> {
   await ensureSchema();
   const rows = await sql()`
-    select * from gold_entries order by year desc, month desc
+    select * from gold_entries where user_id = ${username} order by year desc, month desc
   `;
   return rows.map(mapGoldEntry);
 }
 
 export async function upsertGoldEntry(input: {
+  username: string;
   month: number;
   year: number;
   goldType: GoldEntry["goldType"];
@@ -790,8 +865,9 @@ export async function upsertGoldEntry(input: {
 }): Promise<GoldEntry> {
   await ensureSchema();
   const rows = await sql()`
-    insert into gold_entries (month, year, gold_type, quantity, carat, grams, price_per_gram, note)
+    insert into gold_entries (user_id, month, year, gold_type, quantity, carat, grams, price_per_gram, note)
     values (
+      ${input.username},
       ${input.month},
       ${input.year},
       ${input.goldType},
@@ -806,7 +882,7 @@ export async function upsertGoldEntry(input: {
   return mapGoldEntry(rows[0]);
 }
 
-export async function deleteGoldEntry(id: string): Promise<void> {
+export async function deleteGoldEntry(username: string, id: string): Promise<void> {
   await ensureSchema();
-  await sql()`delete from gold_entries where id = ${id}`;
+  await sql()`delete from gold_entries where id = ${id} and user_id = ${username}`;
 }

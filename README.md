@@ -4,7 +4,8 @@ Kisisel kullanim icin tasarlanmis Next.js uygulamasi. Garanti BBVA kredi karti e
 
 ## Ozellikler
 
-- Tek sifreli giris
+- Kullanici adiyla hesap secimi ve yeni kullanici olusturma
+- Harcama, ekstre, taksit ve yatirim kayitlarinda kullanici bazli veri ayrimi
 - Garanti BBVA PDF, metin katmanli Yapi Kredi PDF ve Yapi Kredi Excel ekstresi onizleme ve ice aktarma
 - PDF satirlarinda sektor duzeltme ve kategori kurali ogrenme
 - Manuel harcama ekleme, duzenleme ve silme
@@ -23,7 +24,6 @@ npm run dev
 `.env.local` degerleri:
 
 ```bash
-APP_PASSWORD=change-this-password
 AUTH_SECRET=change-this-long-random-secret
 DATABASE_URL=postgres://user:password@host:5432/database?sslmode=require
 ALTINAPI_API_KEY=your-altinapi-key
@@ -31,13 +31,13 @@ ALTINAPI_API_KEY=your-altinapi-key
 
 Uygulama veritabani baglantisi icin sirasiyla `DATABASE_URL`, `POSTGRES_URL`, `SUPABASE_DATABASE_URL` ve `SUPABASE_DB_URL` degiskenlerine bakar. Vercel/Supabase entegrasyonu farkli isimde baglanti adresi urettiyse bunu `DATABASE_URL` olarak kopyalamak en net yoldur.
 
-Varsayilan lokal sifre `admin`, ancak deploy etmeden once `APP_PASSWORD` ve `AUTH_SECRET` mutlaka ayarlanmalidir.
+Oturumlar kullanici adini iceren imzali bir cookie ile korunur. Deploy etmeden once uzun ve rastgele bir `AUTH_SECRET` ayarlanmalidir.
 
 ## Vercel Deploy
 
 1. Projeyi GitHub'a push edin.
 2. Vercel'de yeni proje olarak import edin.
-3. Environment Variables alanina `APP_PASSWORD`, `AUTH_SECRET`, `ALTINAPI_API_KEY` ve PostgreSQL connection string ekleyin. Tavsiye edilen isim `DATABASE_URL`.
+3. Environment Variables alanina `AUTH_SECRET`, `ALTINAPI_API_KEY` ve PostgreSQL connection string ekleyin. Tavsiye edilen isim `DATABASE_URL`.
 4. PostgreSQL icin Supabase veya Neon kullanabilirsiniz.
 5. Supabase connection string `sslmode=require` ile bitmelidir.
 6. Deploy edin. Uygulama ilk API isteginde gerekli tablolari otomatik olusturur.

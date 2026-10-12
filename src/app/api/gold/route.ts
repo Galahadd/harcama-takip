@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteGoldEntry, listGoldEntries, upsertGoldEntry } from "@/lib/db";
 import type { GoldType } from "@/lib/types";
+import { getRequestUsername } from "@/lib/auth";
 
 const GOLD_TYPES: Record<GoldType, { gramsPerUnit: number | null; carat: 22 | 24 | null }> = {
   gram_24: { gramsPerUnit: null, carat: 24 },
@@ -12,9 +13,11 @@ const GOLD_TYPES: Record<GoldType, { gramsPerUnit: number | null; carat: 22 | 24
   republic: { gramsPerUnit: 7.216, carat: 22 },
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const entries = await listGoldEntries();
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
+    const entries = await listGoldEntries(username);
     return NextResponse.json({ entries });
   } catch (error) {
     return NextResponse.json(
@@ -26,6 +29,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const body = (await request.json()) as {
       month?: number;
       year?: number;
@@ -76,6 +81,7 @@ export async function POST(request: Request) {
 
     const grams = gold.gramsPerUnit === null ? quantity : quantity * gold.gramsPerUnit;
     const entry = await upsertGoldEntry({
+      username,
       month,
       year,
       goldType: body.goldType,
@@ -96,11 +102,13 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const body = (await request.json()) as { id?: string };
     if (!body.id) {
       return NextResponse.json({ error: "Silinecek kayit id gerekli." }, { status: 400 });
     }
-    await deleteGoldEntry(body.id);
+    await deleteGoldEntry(username, body.id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

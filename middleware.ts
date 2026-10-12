@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authCookieName, isValidSession } from "./src/lib/auth";
+import { authCookieName, getSessionUsername } from "./src/lib/auth";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
   }
 
   const session = request.cookies.get(authCookieName)?.value;
-  if (!(await isValidSession(session))) {
+  if (!(await getSessionUsername(session))) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

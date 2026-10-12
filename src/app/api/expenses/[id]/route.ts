@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteExpense, updateExpense } from "@/lib/db";
 import { isKnownCategory } from "@/lib/categorize";
+import { getRequestUsername } from "@/lib/auth";
 
 type Params = {
   params: Promise<{ id: string }>;
@@ -8,6 +9,8 @@ type Params = {
 
 export async function PATCH(request: Request, { params }: Params) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const { id } = await params;
     const body = (await request.json()) as {
       date?: string;
@@ -24,7 +27,7 @@ export async function PATCH(request: Request, { params }: Params) {
       return NextResponse.json({ error: "Gecersiz sektor." }, { status: 400 });
     }
 
-    const expense = await updateExpense(id, {
+    const expense = await updateExpense(username, id, {
       date: body.date,
       description: body.description.trim(),
       amount: Number(body.amount),
@@ -44,10 +47,12 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Params) {
+export async function DELETE(request: Request, { params }: Params) {
   try {
+    const username = await getRequestUsername(request);
+    if (!username) return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
     const { id } = await params;
-    await deleteExpense(id);
+    await deleteExpense(username, id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(

@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
-import { authCookieName, isValidPassword, signSession } from "@/lib/auth";
+import { authCookieName, isValidUsername, normalizeUsername, signSession } from "@/lib/auth";
+import { userExists } from "@/lib/db";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as { password?: string } | null;
+  const body = (await request.json().catch(() => null)) as { username?: string } | null;
+  const username = normalizeUsername(body?.username || "");
 
-  if (!body?.password || !isValidPassword(body.password)) {
-    return NextResponse.json({ error: "Gecersiz sifre." }, { status: 401 });
+  if (!isValidUsername(username) || !(await userExists(username))) {
+    return NextResponse.json({ error: "Kullanıcı bulunamadı." }, { status: 401 });
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(authCookieName, await signSession(), {
+  response.cookies.set(authCookieName, await signSession(username), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
