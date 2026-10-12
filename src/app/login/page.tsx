@@ -71,7 +71,7 @@ export default function LoginPage() {
             <label htmlFor="username">Kullanıcı adı</label>
             <div className="login-input-wrap">
               <UserRound size={17} />
-              <input id="username" type="text" autoComplete="username" placeholder="ör. recep.kaya11" value={username}
+              <input id="username" type="text" autoComplete="username" value={username}
                 onChange={(event) => setUsername(event.target.value)} pattern="[A-Za-z0-9._-]{3,40}" minLength={3} maxLength={40} autoFocus required />
             </div>
             <p className="login-hint">Harf, rakam, nokta, tire ve alt çizgi kullanabilirsin.</p>
