@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050508">
+  <meta name="description" content="Hesabım: kullanıcı hesabına özel harcama, ekstre ve yatırım takibi.">
+  <title>Hesabım — Kişisel finans</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;800&display=block" rel="stylesheet">
+  <style>
+    :root {
+      --u: min(calc(100vw / 1280), calc(100dvh / 760));
+      --ink: #fff; --ink-muted: #c4c2cf; --panel: #181818;
+      --white-btn: #fdfdfd; --btn-ink: #050505;
+      --glass-fill: rgba(9, 8, 17, .82); --glass-line: rgba(255,255,255,.15);
+      --e-reveal: cubic-bezier(.16,1,.3,1); --e-soft: cubic-bezier(.25,.8,.3,1);
+    }
+    @supports not (height: 100dvh) { :root { --u: min(calc(100vw / 1280), calc(100vh / 760)); } }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
+    body { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: geometricPrecision; color: var(--ink); }
+    button, input { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button, a { cursor: pointer; }
+    button { color: inherit; }
+    button:disabled { cursor: wait; opacity: .55; }
+    a:focus-visible, button:focus-visible, input:focus-visible { outline: calc(2 * var(--u)) solid #bda5ff; outline-offset: calc(4 * var(--u)); }
+    a { color: inherit; text-decoration: none; }
+    .hero { position: relative; width: 100vw; height: 100dvh; isolation: isolate; overflow: hidden; background: #000; }
+    @supports not (height: 100dvh) { .hero { height: 100vh; } }
+    .bg { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: max(100vw, calc(100dvh * 1.6)); height: max(62.5vw, 100dvh); background: #000 url('https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/82e7eb75-c65f-490a-99b5-f3d1cad54200.webp') center / cover; z-index: -3; }
+    @supports not (height: 100dvh) { .bg { width: max(100vw, calc(100vh * 1.6)); height: max(62.5vw, 100vh); } }
+    .bg-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 51% 8%; display: block; background: #000; pointer-events: none; opacity: 0; transition: opacity .9s linear; }
+    .bg-video.is-active { opacity: 1; }
+    .shade { position: absolute; inset: 0; z-index: -2; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,.58), rgba(0,0,0,.06) 29%, rgba(0,0,0,.18) 65%, rgba(0,0,0,.7)), radial-gradient(ellipse at 50% 45%, rgba(0,0,0,.08), rgba(0,0,0,.16)); }
+    .nav { position: absolute; inset: 0 0 auto; height: calc(86 * var(--u)); display: flex; align-items: center; padding: 0 calc(44 * var(--u)); gap: calc(24 * var(--u)); z-index: 5; }
+    .logo { display: inline-flex; align-items: center; gap: calc(10 * var(--u)); font-size: calc(23 * var(--u)); font-weight: 800; letter-spacing: calc(-.7 * var(--u)); line-height: 1; white-space: nowrap; }
+    .logo svg { width: calc(29 * var(--u)); height: calc(29 * var(--u)); color: #c8b6ff; }
+    .nav-links { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: calc(28 * var(--u)); color: #d3d0df; font-size: calc(12 * var(--u)); }
+    .nav-links span { display: flex; align-items: center; gap: calc(7 * var(--u)); }
+    .nav-links svg { width: calc(14 * var(--u)); height: calc(14 * var(--u)); color: #a49bab; }
+    .nav-actions { margin-left: auto; display: flex; gap: calc(9 * var(--u)); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: calc(8 * var(--u)); border: 0; font-weight: 500; white-space: nowrap; transition: background .18s, color .18s, border-color .18s; }
+    .btn-login, .btn-nav-start { height: calc(38 * var(--u)); padding: 0 calc(17 * var(--u)); border-radius: calc(22 * var(--u)); font-size: calc(12 * var(--u)); }
+    .btn-login { background: #1b1a20; color: #e8e8e8; }
+    .btn-login:hover { background: #302b39; }
+    .btn-nav-start { background: var(--white-btn); color: var(--btn-ink); }
+    .btn-nav-start:hover { background: #e8dfff; }
+    .arw { display: block; flex: 0 0 auto; width: calc(14 * var(--u)); height: calc(12 * var(--u)); }
+    .burger { display: none; margin-left: auto; width: calc(44 * var(--u)); height: calc(40 * var(--u)); align-items: center; justify-content: center; padding: 0; background: #1b1a20; border: calc(1 * var(--u)) solid var(--glass-line); border-radius: calc(12 * var(--u)); }
+    .burger span, .burger span::before, .burger span::after { display: block; width: 16px; height: 1.5px; background: #ededed; border-radius: 2px; position: relative; }
+    .burger span::before, .burger span::after { content: ''; position: absolute; left: 0; }
+    .burger span::before { top: -5px; } .burger span::after { top: 5px; }
+    .menu { display: none; }
+    .hero-inner { position: absolute; top: 50%; left: 50%; width: calc(630 * var(--u)); transform: translate(-50%,-49%); text-align: center; z-index: 2; }
+    .eyebrow { display: inline-flex; align-items: center; gap: calc(7 * var(--u)); padding: calc(6 * var(--u)) calc(12 * var(--u)); margin: 0 0 calc(18 * var(--u)); border: calc(1 * var(--u)) solid #ffffff24; border-radius: calc(20 * var(--u)); color: #d6c9f4; background: #160e2459; font-size: calc(10 * var(--u)); font-weight: 400; letter-spacing: calc(.4 * var(--u)); }
+    .eyebrow span { width: calc(4 * var(--u)); height: calc(4 * var(--u)); border-radius: 50%; background: #b79ae9; }
+    h1 { margin: 0; font-size: calc(69 * var(--u)); line-height: calc(74 * var(--u)); font-weight: 500; letter-spacing: calc(-2.8 * var(--u)); text-shadow: 0 calc(3 * var(--u)) calc(40 * var(--u)) #0009; }
+    .ln, .ln-i { display: block; }
+    .sub { margin: calc(17 * var(--u)) 0 0; color: #dedbe5; font-size: calc(14 * var(--u)); font-weight: 300; line-height: calc(23 * var(--u)); letter-spacing: calc(-.15 * var(--u)); text-shadow: 0 calc(1 * var(--u)) calc(12 * var(--u)) #000; }
+    .account-panel { width: calc(390 * var(--u)); margin: calc(26 * var(--u)) auto 0; padding: calc(24 * var(--u)); text-align: left; background: var(--glass-fill); border: calc(1 * var(--u)) solid var(--glass-line); border-radius: calc(18 * var(--u)); backdrop-filter: blur(calc(18 * var(--u))); -webkit-backdrop-filter: blur(calc(18 * var(--u))); box-shadow: 0 calc(16 * var(--u)) calc(50 * var(--u)) #0005; }
+    .panel-top { display: flex; align-items: center; gap: calc(10 * var(--u)); margin-bottom: calc(20 * var(--u)); }
+    .panel-icon { display: grid; place-items: center; width: calc(34 * var(--u)); height: calc(34 * var(--u)); background: #ffffff0d; border: calc(1 * var(--u)) solid #ffffff12; border-radius: calc(10 * var(--u)); color: #d0b6fc; }
+    .panel-icon svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
+    .panel-top h2 { margin: 0; font-size: calc(16 * var(--u)); font-weight: 500; letter-spacing: calc(-.3 * var(--u)); }
+    .panel-top p { margin: calc(4 * var(--u)) 0 0; font-size: calc(10 * var(--u)); color: #c0b8cc; }
+    label { display: block; margin-bottom: calc(8 * var(--u)); font-size: calc(11 * var(--u)); font-weight: 500; color: #dfdae7; }
+    input { display: block; width: 100%; height: calc(45 * var(--u)); padding: 0 calc(13 * var(--u)); border: calc(1 * var(--u)) solid #ffffff26; border-radius: calc(8 * var(--u)); background: #ffffff08; color: #fff; font-size: calc(14 * var(--u)); caret-color: #c7a8ff; transition: background .18s, border-color .18s; }
+    input:hover { border-color: #ffffff50; } input:focus { border-color: #b397e2; background: #ffffff0c; }
+    .hint { margin: calc(7 * var(--u)) 0 0; color: #b5adbf; font-size: calc(9 * var(--u)); line-height: 1.5; }
+    .feedback { margin: calc(12 * var(--u)) 0 0; padding: calc(9 * var(--u)) calc(10 * var(--u)); border: calc(1 * var(--u)) solid #e59aa633; border-radius: calc(7 * var(--u)); background: #8b27412b; color: #ffd9df; font-size: calc(11 * var(--u)); line-height: 1.5; }
+    .feedback.success { border-color: #82cba13b; background: #226d3c33; color: #c2eed0; }
+    [hidden] { display: none !important; }
+    .btn-primary { width: 100%; height: calc(44 * var(--u)); margin-top: calc(16 * var(--u)); padding: 0 calc(15 * var(--u)); justify-content: space-between; border-radius: calc(8 * var(--u)); background: var(--white-btn); color: var(--btn-ink); font-size: calc(12 * var(--u)); }
+    .btn-primary:hover { background: #e9dfff; }
+    .alternate { display: flex; justify-content: center; align-items: center; gap: calc(5 * var(--u)); margin-top: calc(12 * var(--u)); color: #c0b8cc; font-size: calc(10 * var(--u)); }
+    .btn-ghost { border: 0; padding: calc(5 * var(--u)) calc(2 * var(--u)); background: transparent; color: #e8daff; font-size: inherit; text-decoration: underline; text-underline-offset: calc(3 * var(--u)); }
+    .btn-ghost:hover { color: white; }
+    .footer { position: absolute; left: calc(44 * var(--u)); right: calc(44 * var(--u)); bottom: calc(24 * var(--u)); display: flex; justify-content: space-between; align-items: center; gap: calc(20 * var(--u)); z-index: 3; }
+    .footer p { display: flex; align-items: center; gap: calc(7 * var(--u)); margin: 0; color: #c0b7cc; font-size: calc(10 * var(--u)); }
+    .footer p svg { width: calc(13 * var(--u)); height: calc(13 * var(--u)); color: #b4a1d0; }
+    .motion { min-height: calc(38 * var(--u)); display: flex; align-items: center; gap: calc(7 * var(--u)); padding: 0 calc(12 * var(--u)); border: calc(1 * var(--u)) solid #ffffff20; border-radius: calc(22 * var(--u)); background: #0c0912a8; color: #d5ccdf; font-size: calc(10 * var(--u)); }
+    .motion svg { width: calc(11 * var(--u)); height: calc(11 * var(--u)); }
+    .no-js { position: absolute; left: 50%; bottom: calc(75 * var(--u)); transform: translateX(-50%); color: #fff; font-size: calc(12 * var(--u)); text-align: center; }
+    html.anim .ln { overflow: hidden; padding-top: .26em; margin-top: -.26em; }
+    html.anim .ln-i { transform: translateY(100%); will-change: transform; }
+    html.anim :is(.logo,.nav-links span,.nav-actions .btn,.burger,.eyebrow,.sub,.account-panel) { opacity: 0; will-change: transform,opacity; }
+    @keyframes lineRise { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    @keyframes subIn { from { opacity: 0; transform: translateY(calc(14 * var(--u))); filter: blur(calc(4 * var(--u))); } to { opacity: 1; transform: none; filter: blur(0); } }
+    @keyframes subInFlat { from { opacity: 0; transform: translateY(calc(12 * var(--u))); } to { opacity: 1; transform: none; } }
+    @keyframes pillIn { from { opacity: 0; transform: translateY(calc(8 * var(--u))) scale(.972); } to { opacity: 1; transform: none; } }
+    @keyframes liftIn { from { opacity: 0; transform: translateY(calc(9 * var(--u))); } to { opacity: 1; transform: none; } }
+    @keyframes menuIn { from { opacity: 0; transform: translateY(-6px) scale(.985); } to { opacity: 1; transform: none; } }
+    html.anim.go .ln-i { animation: lineRise 1.05s var(--e-reveal) both; }
+    html.anim.go .ln:nth-child(1) .ln-i { animation-delay: .12s; }
+    html.anim.go .ln:nth-child(2) .ln-i { animation-delay: .22s; }
+    html.anim.go .logo { animation: liftIn .62s var(--e-soft) .46s both; }
+    html.anim.go .nav-links span { animation: liftIn .55s var(--e-soft) both; }
+    html.anim.go .nav-links span:nth-child(1) { animation-delay: .54s; }
+    html.anim.go .nav-links span:nth-child(2) { animation-delay: .585s; }
+    html.anim.go .nav-links span:nth-child(3) { animation-delay: .63s; }
+    html.anim.go .eyebrow { animation: liftIn .55s var(--e-soft) .3s both; }
+    html.anim.go .sub { animation: subIn .85s var(--e-reveal) .58s both; }
+    html.anim.go :is(.btn-login,.burger) { animation: pillIn .55s var(--e-soft) .68s both; }
+    html.anim.go .btn-nav-start { animation: pillIn .55s var(--e-soft) .73s both; }
+    html.anim.go .account-panel { animation: pillIn .7s var(--e-reveal) .97s both; }
+    @media (max-width:1160px) {
+      :root { --u: min(max(.9px,min(calc(100vw / 1280),calc(100dvh / 760))),calc((100vw - 72px) / 575),calc(100dvh / 660)); }
+      .nav { height: max(64px,calc(86 * var(--u))); padding: 0 max(24px,calc(28 * var(--u))); }
+      .nav-links,.nav-actions { display: none; }
+      .burger { display: flex; width: 44px; height: 44px; border-radius: 14px; }
+      .hero-inner { max-width: calc(100vw - 48px); }
+      .menu { position: absolute; top: 66px; right: 24px; width: min(300px,calc(100vw - 48px)); padding: 8px; background: #100c19f5; border: 1px solid #ffffff29; border-radius: 16px; box-shadow: 0 20px 60px #0009; z-index: 6; transform-origin: top right; }
+      .menu.open { display: flex; flex-direction: column; animation: menuIn .18s ease both; }
+      .menu button { min-height: 46px; text-align: left; padding: 12px 14px; border: 0; border-radius: 10px; background: transparent; color: #e8e0ef; font-size: 14px; }
+      .menu button:hover { background: #ffffff0f; }
+      .footer { left: 24px; right: 24px; bottom: max(18px,env(safe-area-inset-bottom)); }
+      .footer p { font-size: 11px; } .motion { min-height: 44px; font-size: 11px; }
+      .panel-top p { font-size: max(11px,calc(10 * var(--u))); }
+      .hint { font-size: max(10px,calc(9 * var(--u))); }
+    }
+    @media (max-width:552px) {
+      :root { --u: 1px; }
+      .nav { height: 68px; padding: env(safe-area-inset-top) 20px 0; }
+      .logo { font-size: 22px; } .logo svg { width: 27px; height: 27px; }
+      .hero-inner { left: 0; right: 0; top: 50%; width: auto; max-width: none; padding: 0 20px; transform: translateY(-48%); }
+      h1 { font-size: clamp(38px,10vw,57px); line-height: 1.06; letter-spacing: -.04em; }
+      .eyebrow { margin-bottom: 14px; font-size: 10px; }
+      .sub { max-width: 36ch; margin: 14px auto 0; font-size: 13px; line-height: 1.65; }
+      .sub br { display: none; }
+      .account-panel { width: min(100%,370px); padding: 22px; margin-top: 23px; border-radius: 16px; }
+      .panel-top { margin-bottom: 18px; } .panel-top h2 { font-size: 17px; } .panel-top p { font-size: 11px; }
+      label { font-size: 12px; } input { height: 48px; font-size: 16px; }
+      .hint { font-size: 10px; } .btn-primary { min-height: 46px; font-size: 13px; }
+      .alternate { font-size: 11px; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+      .btn-ghost { min-height: 38px; }
+      .footer { left: 20px; right: 20px; bottom: max(12px,env(safe-area-inset-bottom)); }
+      .footer p { font-size: 9px; max-width: 175px; line-height: 1.6; } .footer p svg { flex: 0 0 auto; }
+      .motion { min-width: 44px; min-height: 44px; padding: 0 12px; } .motion-label { display: none; }
+      .menu { top: 65px; left: 16px; right: 16px; width: auto; }
+      html.anim.go .sub { animation-name: subInFlat; } html.anim.go .ln-i { animation-duration: .92s; }
+      .feedback { font-size: 12px; }
+    }
+    @media (max-height:700px) and (max-width:552px) {
+      .eyebrow { display: none; } h1 { font-size: 36px; } .sub { font-size: 12px; margin-top: 10px; }
+      .account-panel { margin-top: 16px; padding: 18px; } .panel-top { margin-bottom: 12px; }
+      .hero-inner { transform: translateY(-47%); } .alternate { margin-top: 3px; }
+    }
+    @media (max-height:560px) {
+      html,body { overflow-y: auto; } .hero { min-height: 650px; height: auto; }
+      .hero-inner { position: relative; inset: auto; transform: none; margin: 95px auto 85px; }
+      .footer { bottom: 12px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      html.anim .ln { overflow: visible; padding-top: 0; margin-top: 0; }
+      html.anim .ln-i { transform: none; }
+      html.anim :is(.logo,.nav-links span,.nav-actions .btn,.burger,.eyebrow,.sub,.account-panel) { opacity: 1; }
+      *,*::before,*::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+  <script>
+    (() => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const root = document.documentElement;
+      root.classList.add('anim');
+      let started = false, finished = false, bootTimer, safetyTimer;
+      function clean() {
+        if (finished) return;
+        finished = true;
+        clearTimeout(bootTimer); clearTimeout(safetyTimer);
+        document.removeEventListener('animationend', onEnd, true);
+        root.classList.remove('anim', 'go');
+      }
+      function onEnd(event) {
+        if (event.animationName === 'pillIn' && event.target.classList.contains('account-panel')) clean();
+      }
+      function start() {
+        if (started) return;
+        started = true; clearTimeout(bootTimer);
+        document.addEventListener('animationend', onEnd, true);
+        safetyTimer = setTimeout(clean, 2600);
+        root.classList.add('go');
+      }
+      function boot() {
+        bootTimer = setTimeout(start, 900);
+        if (document.fonts) document.fonts.ready.then(start, start); else start();
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once:true}); else boot();
+    })();
+  </script>
+</head>
+<body>
+  <!-- Original implementation. Template direction: free 21st Fintech SaaS Landing Page Template, kedhareswer.
+       https://21st.dev/community/templates/fintech-saas-landing-page-template
+       Layout and copy adapted for personal expense/statement/investment tracking; no template code or libraries included. -->
+  <main class="hero">
+    <div class="bg" role="img" aria-label="Yıldızlar arasında yavaşça dönen, mor noktalardan oluşan dünya küresi">
+      <video class="bg-video is-active" id="bgVideoA" autoplay muted loop playsinline preload="auto" disablepictureinpicture aria-hidden="true" poster="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/82e7eb75-c65f-490a-99b5-f3d1cad54200.webp"><source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260912_104036_bd6924f6-3c8e-417e-8465-6d03c8c2e9e6.mp4" type="video/mp4"></video>
+      <video class="bg-video" id="bgVideoB" muted loop playsinline preload="auto" disablepictureinpicture aria-hidden="true" poster="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/82e7eb75-c65f-490a-99b5-f3d1cad54200.webp"><source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260912_104036_bd6924f6-3c8e-417e-8465-6d03c8c2e9e6.mp4" type="video/mp4"></video>
+    </div>
+    <div class="shade"></div>
+    <header class="nav">
+      <a class="logo" href="/login" aria-label="Hesabım giriş sayfası"><svg viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="3" y="4" width="22" height="20" rx="6" stroke="currentColor" stroke-width="1.5"/><path d="M8 10h12M8 14h5m6 0h1M8 18h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Hesabım</a>
+      <div class="nav-links" aria-label="Uygulama içeriği">
+        <span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5h12v8H2zM3 5V3h9v2m-2 4h4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>Harcamalar</span>
+        <span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 2h6l3 3v9H3V2h1Zm5 0v4h4M5 9h6m-6 3h4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>Ekstreler</span>
+        <span><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 13V3m0 10h12M5 10l3-4 3 2 3-5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Yatırımlar</span>
+      </div>
+      <div class="nav-actions"><button class="btn btn-login" data-mode="login" type="button">Giriş yap</button><button class="btn btn-nav-start" data-mode="create" type="button">Yeni kullanıcı<svg class="arw" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M.8 5h10M7.1 1.4 10.9 5l-3.8 3.6" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+      <button class="burger" id="burger" type="button" aria-label="Menüyü aç" aria-expanded="false" aria-controls="menu"><span></span></button>
+    </header>
+    <nav class="menu" id="menu" aria-label="Hesap menüsü"><button type="button" data-mode="login">Giriş yap</button><button type="button" data-mode="create">Yeni kullanıcı oluştur</button></nav>
+    <div class="hero-inner">
+      <p class="eyebrow"><span></span>Harcama & yatırım takibi</p>
+      <h1><span class="ln"><span class="ln-i">Kişisel finans</span></span><span class="ln"><span class="ln-i">hesabın.</span></span></h1>
+      <p class="sub">Harcamalarını, ekstrelerini ve yatırımlarını<br>kullanıcı hesabına özel takip et.</p>
+      <section class="account-panel" aria-labelledby="formTitle">
+        <div class="panel-top"><span class="panel-icon"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6" r="3" stroke="currentColor" stroke-width="1.3"/><path d="M4 17v-2a6 6 0 0 1 12 0v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span><div><h2 id="formTitle">Giriş yap</h2><p id="formDescription">Kullanıcı adınla hesabına geç.</p></div></div>
+        <form id="accountForm">
+          <label for="username">Kullanıcı adı</label>
+          <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9._-]{3,40}" minlength="3" maxlength="40" required aria-describedby="usernameHint">
+          <p class="hint" id="usernameHint">3–40 karakter · Harf, rakam, nokta, tire veya alt çizgi.</p>
+          <p class="feedback" id="formError" role="alert" hidden></p>
+          <p class="feedback success" id="formSuccess" role="status" hidden></p>
+          <button class="btn btn-primary" id="submitButton" type="submit"><span id="submitText">Giriş yap</span><svg class="arw" viewBox="0 0 12 10" fill="none" aria-hidden="true"><path d="M.8 5h10M7.1 1.4 10.9 5l-3.8 3.6" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="alternate"><span id="alternateText">Hesabın yok mu?</span><button class="btn-ghost" id="switchMode" type="button">Yeni kullanıcı oluştur</button></div>
+        </form>
+      </section>
+    </div>
+    <footer class="footer"><p><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m8 1 5 2v4c0 4-5 7-5 7S3 11 3 7V3l5-2Z" stroke="currentColor" stroke-width="1.2"/><path d="m5.5 7 1.7 1.7 3.3-3.2" stroke="currentColor" stroke-width="1.2"/></svg>Her kullanıcının kayıtları ayrı tutulur.</p><button class="motion" id="motionButton" type="button" aria-label="Arka plan videosunu durdur" aria-pressed="false"><svg id="pauseIcon" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 2v8m4-8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><svg id="playIcon" viewBox="0 0 12 12" fill="none" aria-hidden="true" hidden><path d="m3 2 7 4-7 4V2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg><span class="motion-label" id="motionLabel">Videoyu durdur</span></button></footer>
+    <noscript><p class="no-js">Giriş yapabilmek için tarayıcında JavaScript'i etkinleştir.</p></noscript>
+  </main>
+  <script>
+    (() => {
+      const burger = document.getElementById('burger'), menu = document.getElementById('menu');
+      function setMenu(open) {
+        menu.classList.toggle('open', open);
+        burger.setAttribute('aria-expanded', String(open));
+        burger.setAttribute('aria-label', open ? 'Menüyü kapat' : 'Menüyü aç');
+      }
+      burger.addEventListener('click', (event) => { event.stopPropagation(); setMenu(!menu.classList.contains('open')); });
+      menu.addEventListener('click', (event) => { if (event.target.closest('button')) setMenu(false); });
+      document.addEventListener('click', (event) => { if (!menu.contains(event.target) && !burger.contains(event.target)) setMenu(false); });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && menu.classList.contains('open')) { setMenu(false); burger.focus(); } });
+
+      const form = document.getElementById('accountForm'), username = document.getElementById('username');
+      const error = document.getElementById('formError'), success = document.getElementById('formSuccess');
+      const submit = document.getElementById('submitButton'), submitText = document.getElementById('submitText');
+      const switchMode = document.getElementById('switchMode');
+      let mode = 'login', busy = false;
+      function changeMode(nextMode, focus = true) {
+        if (busy) return;
+        mode = nextMode;
+        error.hidden = true; success.hidden = true; username.removeAttribute('aria-invalid');
+        document.getElementById('formTitle').textContent = mode === 'login' ? 'Giriş yap' : 'Yeni kullanıcı';
+        document.getElementById('formDescription').textContent = mode === 'login' ? 'Kullanıcı adınla hesabına geç.' : 'Ayrı kayıtların için bir kullanıcı adı belirle.';
+        submitText.textContent = mode === 'login' ? 'Giriş yap' : 'Kullanıcı oluştur';
+        document.getElementById('alternateText').textContent = mode === 'login' ? 'Hesabın yok mu?' : 'Zaten hesabın var mı?';
+        switchMode.textContent = mode === 'login' ? 'Yeni kullanıcı oluştur' : 'Giriş yap';
+        if (focus) username.focus({preventScroll:true});
+      }
+      document.querySelectorAll('[data-mode]').forEach((button) => button.addEventListener('click', () => changeMode(button.dataset.mode)));
+      switchMode.addEventListener('click', () => changeMode(mode === 'login' ? 'create' : 'login'));
+      username.addEventListener('input', () => username.removeAttribute('aria-invalid'));
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (busy) return;
+        error.hidden = true; success.hidden = true;
+        const normalized = username.value.trim().toLocaleLowerCase('tr-TR');
+        busy = true; submit.disabled = true; username.disabled = true; switchMode.disabled = true;
+        form.setAttribute('aria-busy','true'); submitText.textContent = 'İşleniyor…';
+        const requestMode = mode;
+        try {
+          const response = await fetch(requestMode === 'login' ? '/api/auth/login' : '/api/auth/users', {
+            method: 'POST', headers: {'Content-Type':'application/json'}, credentials: 'same-origin',
+            body: JSON.stringify({username: normalized}), signal: AbortSignal.timeout(20000),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            error.textContent = data.error || 'İşlem tamamlanamadı. Tekrar dene.'; error.hidden = false;
+            username.setAttribute('aria-invalid', 'true'); return;
+          }
+          if (requestMode === 'login') { window.location.assign('/'); return; }
+          busy = false; changeMode('login', false);
+          username.value = normalized;
+          success.textContent = 'Kullanıcı oluşturuldu. Şimdi giriş yapabilirsin.'; success.hidden = false;
+        } catch {
+          error.textContent = 'Bağlantı kurulamadı. Lütfen tekrar dene.'; error.hidden = false;
+        } finally {
+          busy = false; submit.disabled = false; username.disabled = false; switchMode.disabled = false;
+          form.removeAttribute('aria-busy'); submitText.textContent = mode === 'login' ? 'Giriş yap' : 'Kullanıcı oluştur';
+          if (!error.hidden || !success.hidden) username.focus({preventScroll:true});
+        }
+      });
+    })();
+  </script>
+  <script>
+    (() => {
+      const A = document.getElementById('bgVideoA'), B = document.getElementById('bgVideoB');
+      if (!A || !B) return;
+      const button = document.getElementById('motionButton'), motion = matchMedia('(prefers-reduced-motion: reduce)');
+      const FADE = .9;
+      let cur = A, nxt = B, swapping = false, timer, paused = motion.matches, failed = false, generation = 0;
+      function play(video) {
+        try { const result = video.play(); if (result) return result.then(() => true, () => false); }
+        catch { return Promise.resolve(false); }
+        return Promise.resolve(true);
+      }
+      function render() {
+        button.setAttribute('aria-pressed', String(paused));
+        button.setAttribute('aria-label', paused ? 'Arka plan videosunu oynat' : 'Arka plan videosunu durdur');
+        document.getElementById('motionLabel').textContent = paused ? 'Videoyu oynat' : 'Videoyu durdur';
+        document.getElementById('pauseIcon').toggleAttribute('hidden', paused);
+        document.getElementById('playIcon').toggleAttribute('hidden', !paused);
+      }
+      function settle() {
+        generation += 1; clearTimeout(timer); swapping = false;
+        A.pause(); B.pause();
+        cur.classList.add('is-active'); nxt.classList.remove('is-active');
+      }
+      async function resume() {
+        if (paused || failed || document.hidden) return;
+        const ticket = generation;
+        const played = await play(cur);
+        if (ticket !== generation || paused || document.hidden) return;
+        if (!played) { paused = true; render(); }
+      }
+      async function tick() {
+        if (paused || failed || document.hidden || swapping || !Number.isFinite(cur.duration) || cur.duration - cur.currentTime > FADE || nxt.readyState < 2) return;
+        swapping = true;
+        const out = cur, incoming = nxt, ticket = generation;
+        try { incoming.currentTime = 0; } catch { swapping = false; return; }
+        const played = await play(incoming);
+        if (ticket !== generation || paused || document.hidden) { incoming.pause(); return; }
+        if (!played) { swapping = false; return; }
+        incoming.classList.add('is-active'); out.classList.remove('is-active');
+        cur = incoming; nxt = out;
+        timer = setTimeout(() => { out.pause(); try { out.currentTime = 0; } catch {} swapping = false; }, FADE * 1000 + 100);
+      }
+      function applyMotionPreference() {
+        paused = motion.matches; settle();
+        if (paused) {
+          A.removeAttribute('autoplay'); cur = A; nxt = B;
+          A.classList.add('is-active'); B.classList.remove('is-active');
+          try { A.currentTime = 0; } catch {}
+        } else resume();
+        render();
+      }
+      A.addEventListener('timeupdate', tick); B.addEventListener('timeupdate', tick);
+      [A,B].forEach((video) => video.addEventListener('error', () => { failed = true; paused = true; settle(); button.hidden = true; }));
+      button.addEventListener('click', () => { paused = !paused; if (paused) settle(); else resume(); render(); });
+      document.addEventListener('visibilitychange', () => { if (document.hidden) settle(); else resume(); });
+      motion.addEventListener('change', applyMotionPreference);
+      applyMotionPreference();
+    })();
+  </script>
+</body>
+</html>

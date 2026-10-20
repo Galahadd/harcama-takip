@@ -44,6 +44,9 @@ Oturumlar kullanici adini iceren imzali bir cookie ile korunur. Deploy etmeden o
 
 ## Notlar
 
+- Giriş ekranı `public/login/index.html` içinde tek dosya olarak tutulur; CSS ve JavaScript dosyanın içindedir, bir arayüz kütüphanesi veya ayrı derleme gerektirmez. Next.js `/login` adresini bu statik dosyaya eşler. Kullanıcı girişi ve oluşturma, aynı origin'deki mevcut `/api/auth/login` ve `/api/auth/users` uçlarını kullanır.
+- Giriş tasarımı için 21st kataloğundaki ücretsiz [Fintech SaaS Landing Page Template](https://21st.dev/community/templates/fintech-saas-landing-page-template) içerik referansı seçildi. Şablon kodu alınmadı; verilen video hero tasarımına uyarlanan özgün HTML kullanıldı. Google Fonts ve kullanıcı tarafından sağlanan CloudFront video/poster adresleri doğrudan yüklenir. Hareketi azalt tercihi ve video durdurma düğmesi desteklenir.
+
 - Yatırımlar sayfası AltinAPI `/api/v1/prices` yanıtındaki `ALTIN.bid` (24 ayar gram) ve `AYAR22.bid` (22 ayar gram) alış fiyatlarını kullanır. API anahtarı yalnızca sunucuda `ALTINAPI_API_KEY` değişkeninde saklanır; `NEXT_PUBLIC_` öneki kullanılmaz.
 - Fiyatlar sayfa açılışında ve yenile düğmesiyle alınır; sunucuda 5 dakika önbellek kullanılır. Veri zamanı ve varsa piyasa kapalı/güncel olmayan veri uyarısı gösterilir. API hatasında değerler boş bırakılır ve tekrar deneme sunulur.
 - Kâr/zarar yalnızca alış maliyeti girilmiş kayıtlar için hesaplanır; maliyeti olmayan kayıtların güncel değeri portföy toplamına dahil edilir.
