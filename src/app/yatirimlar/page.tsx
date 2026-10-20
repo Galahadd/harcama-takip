@@ -6,7 +6,7 @@ import { currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import type { GoldEntry, GoldType } from "@/lib/types";
 import { goldEntryValue, goldPortfolioTotals, type GoldPrices } from "@/lib/gold-prices";
 import { AppShell } from "@/components/app-shell";
-import Link from "next/link";
+import { sessionFetch } from "@/lib/session-fetch";
 
 const GOLD_OPTIONS: Array<{
   value: GoldType;
@@ -45,16 +45,14 @@ export default function YatirimlarPage() {
   const [prices, setPrices] = useState<GoldPrices | null>(null);
   const [pricesLoading, setPricesLoading] = useState(true);
   const [priceError, setPriceError] = useState("");
-  const [requiresLogin, setRequiresLogin] = useState(false);
 
   async function loadPrices() {
     setPricesLoading(true);
     setPriceError("");
-    setRequiresLogin(false);
     try {
-      const res = await fetch("/api/gold/price", { cache: "no-store" });
+      const res = await sessionFetch("/api/gold/price");
+      if (!res) return;
       if (!res.ok) {
-        setRequiresLogin(res.status === 401);
         const data = await res.json().catch(() => null);
         throw new Error(data?.error || "Altın alış fiyatları alınamadı.");
       }
@@ -70,7 +68,8 @@ export default function YatirimlarPage() {
   async function loadEntries() {
     setLoading(true);
     try {
-      const res = await fetch("/api/gold");
+      const res = await sessionFetch("/api/gold");
+      if (!res) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Kayıtlar alınamadı.");
       setEntries(data.entries);
@@ -89,7 +88,7 @@ export default function YatirimlarPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
-    const res = await fetch("/api/gold", {
+    const res = await sessionFetch("/api/gold", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -102,6 +101,7 @@ export default function YatirimlarPage() {
         note: form.note.trim() || null,
       }),
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok) {
       setMessage(data.error || "Kayit eklenemedi.");
@@ -122,11 +122,12 @@ export default function YatirimlarPage() {
 
   async function handleDelete(id: string) {
     if (!window.confirm("Bu kayit silinsin mi?")) return;
-    const res = await fetch("/api/gold", {
+    const res = await sessionFetch("/api/gold", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
+    if (!res) return;
     const data = await res.json();
     if (!res.ok) {
       setMessage(data.error || "Kayit silinemedi.");
@@ -327,9 +328,6 @@ export default function YatirimlarPage() {
               <p className="text-xs text-amber-700">Fiyatlar 5 dakika önbellekte tutulur.</p>
             </div>
             {priceError ? <p role="alert" className="mt-3 text-sm text-red-700">{priceError}</p> : null}
-            {requiresLogin ? (
-              <Link href="/login" className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md bg-amber-600 text-sm font-medium text-white">Yeniden giriş yap</Link>
-            ) : null}
             {prices?.stale ? (
               <p role="status" className="mt-3 text-xs text-amber-900">Kaynak verisi güncel değil; hesaplama son alınan alış fiyatlarını kullanıyor.</p>
             ) : prices?.marketClosed ? (

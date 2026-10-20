@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { sessionFetch } from "@/lib/session-fetch";
 import clsx from "clsx";
 import { categories, currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import {
@@ -115,7 +116,8 @@ export default function Home() {
   async function loadSummary(month = selectedMonth, year = selectedYear, bank = selectedBank) {
     setLoading(true);
     setMessage("");
-    const response = await fetch(`/api/summary?month=${month}&year=${year}&bank=${bank}`);
+    const response = await sessionFetch(`/api/summary?month=${month}&year=${year}&bank=${bank}`);
+    if (!response) return;
     const data = await response.json();
     if (!response.ok) {
       setMessage(data.error || "Veri alinamadi.");
@@ -196,11 +198,12 @@ export default function Home() {
     };
 
     const url = editing ? `/api/expenses/${editing.id}` : "/api/expenses";
-    const response = await fetch(url, {
+    const response = await sessionFetch(url, {
       method: editing ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (!response) return;
     const data = await response.json();
 
     if (!response.ok) {
@@ -223,7 +226,8 @@ export default function Home() {
   }
 
   async function deleteExpense(id: string) {
-    const response = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+    const response = await sessionFetch(`/api/expenses/${id}`, { method: "DELETE" });
+    if (!response) return;
     if (!response.ok) {
       const data = await response.json();
       setMessage(data.error || "Harcama silinemedi.");
@@ -244,11 +248,12 @@ export default function Home() {
       return;
     }
 
-    const response = await fetch("/api/expenses", {
+    const response = await sessionFetch("/api/expenses", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     });
+    if (!response) return;
     const data = await response.json();
 
     if (!response.ok) {
@@ -266,11 +271,12 @@ export default function Home() {
       return;
     }
 
-    const response = await fetch("/api/expenses", {
+    const response = await sessionFetch("/api/expenses", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ month: selectedMonth, year: selectedYear, bank: selectedBank }),
     });
+    if (!response) return;
     const data = await response.json();
 
     if (!response.ok) {
@@ -294,10 +300,11 @@ export default function Home() {
     const formData = new FormData();
     formData.set("file", pdfFile);
     formData.set("bank", uploadBank);
-    const response = await fetch("/api/statements/preview", {
+    const response = await sessionFetch("/api/statements/preview", {
       method: "POST",
       body: formData,
     });
+    if (!response) return;
     const data = await response.json();
     setPreviewing(false);
 
@@ -323,10 +330,11 @@ export default function Home() {
     formData.set("bank", uploadBank);
     formData.set("rows", JSON.stringify(previewRows));
 
-    const response = await fetch("/api/statements/import", {
+    const response = await sessionFetch("/api/statements/import", {
       method: "POST",
       body: formData,
     });
+    if (!response) return;
     const data = await response.json();
 
     if (!response.ok) {

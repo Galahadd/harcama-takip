@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { sessionFetch } from "@/lib/session-fetch";
 import { ArrowUpRight, ChevronRight, Landmark, LogOut, Menu, Moon, Settings, Sun, WalletCards, X } from "lucide-react";
 
 const navigation = [
@@ -25,7 +26,7 @@ export function AppShell({ children, title, description, actions }: {
 
   useEffect(() => {
     try { setDark(localStorage.getItem("finance-theme") === "dark"); } catch { /* Storage is optional. */ }
-    fetch("/api/auth/me").then((response) => response.ok ? response.json() : null).then((data) => {
+    sessionFetch("/api/auth/me").then((response) => response?.ok ? response.json() : null).then((data) => {
       if (data?.username) setUsername(data.username);
     }).catch(() => undefined);
   }, []);

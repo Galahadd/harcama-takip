@@ -15,6 +15,9 @@ export async function middleware(request: NextRequest) {
 
   const session = request.cookies.get(authCookieName)?.value;
   if (!(await getSessionUsername(session))) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Oturum bulunamadı." }, { status: 401 });
+    }
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

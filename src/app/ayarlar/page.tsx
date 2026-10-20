@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Check, Save, UserRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { sessionFetch } from "@/lib/session-fetch";
 
 export default function SettingsPage() {
   const [currentUsername, setCurrentUsername] = useState("");
@@ -13,8 +14,9 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    sessionFetch("/api/auth/me")
       .then(async (response) => {
+        if (!response) return;
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Kullanıcı bilgisi alınamadı.");
         setCurrentUsername(data.username);
@@ -30,11 +32,12 @@ export default function SettingsPage() {
     setError("");
     setSuccess("");
 
-    const response = await fetch("/api/auth/me", {
+    const response = await sessionFetch("/api/auth/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username }),
     });
+    if (!response) return;
     const data = await response.json();
     setSaving(false);
 
