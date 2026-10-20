@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Calculator, Plus, RefreshCcw, Trash2 } from "lucide-react";
+import { CircleHelp, Coins, Landmark, Plus, RefreshCcw, Search, ShieldCheck, TrendingUp, Trash2, WalletCards, X } from "lucide-react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { EmptyState, FormDialog, PanelHeading, StatCard, TablePagination } from "@/components/finance-ui";
 import { currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
 import type { GoldEntry, GoldType } from "@/lib/types";
 import { goldEntryValue, goldPortfolioTotals, type GoldPrices } from "@/lib/gold-prices";
@@ -33,6 +35,11 @@ export default function YatirimlarPage() {
   const [entries, setEntries] = useState<GoldEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [form, setForm] = useState({
     month: current.month,
     year: current.year,
@@ -86,38 +93,48 @@ export default function YatirimlarPage() {
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage("");
-    const res = await sessionFetch("/api/gold", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        month: Number(form.month),
-        year: Number(form.year),
-        goldType: form.goldType,
-        carat: form.goldType === "bracelet_22" ? form.jewelryCarat : undefined,
-        quantity: Number(form.quantity),
-        pricePerGram: form.pricePerGram ? Number(form.pricePerGram) : null,
-        note: form.note.trim() || null,
-      }),
-    });
-    if (!res) return;
-    const data = await res.json();
-    if (!res.ok) {
-      setMessage(data.error || "Kayit eklenemedi.");
-      return;
+
+    if (saving) { event.preventDefault(); return; }
+    setSaving(true);
+    try {
+      event.preventDefault();
+      setMessage("");
+      const res = await sessionFetch("/api/gold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: Number(form.month),
+          year: Number(form.year),
+          goldType: form.goldType,
+          carat: form.goldType === "bracelet_22" ? form.jewelryCarat : undefined,
+          quantity: Number(form.quantity),
+          pricePerGram: form.pricePerGram ? Number(form.pricePerGram) : null,
+          note: form.note.trim() || null,
+        }),
+      });
+      if (!res) return;
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.error || "Kayit eklenemedi.");
+        return;
+      }
+      setMessage("Yatırım kaydı eklendi.");
+      setShowForm(false);
+      setForm({
+        month: current.month,
+        year: current.year,
+        goldType: "gram_24",
+        jewelryCarat: 22,
+        quantity: "",
+        pricePerGram: "",
+        note: "",
+      });
+      await loadEntries();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bağlantı kurulamadı. Lütfen tekrar dene.");
+    } finally {
+      setSaving(false);
     }
-    setMessage("Kayit eklendi.");
-    setForm({
-      month: current.month,
-      year: current.year,
-      goldType: "gram_24",
-      jewelryCarat: 22,
-      quantity: "",
-      pricePerGram: "",
-      note: "",
-    });
-    await loadEntries();
   }
 
   async function handleDelete(id: string) {
@@ -150,210 +167,83 @@ export default function YatirimlarPage() {
   const hasAnyCost = entries.some((e) => e.pricePerGram !== null);
   const selectedGold = getGoldOption(form.goldType);
 
+
+  const holdingColors = ["#7a68dd", "#3c9c91", "#e5b35a", "#7395cc", "#ba78af"];
+  const holdings = GOLD_OPTIONS.map((option) => ({
+    label: option.label,
+    grams: entries.filter((entry) => entry.goldType === option.value).reduce((sum, entry) => sum + entry.grams, 0),
+  })).filter((holding) => holding.grams > 0).sort((a,b) => b.grams - a.grams);
+  const distribution = holdings.length > 5
+    ? [...holdings.slice(0,4), { label: "Diğer türler", grams: holdings.slice(4).reduce((sum, holding) => sum + holding.grams, 0) }]
+    : holdings;
+  const query = search.trim().toLocaleLowerCase("tr-TR");
+  const filteredEntries = entries.filter((entry) =>
+    (typeFilter === "all" || entry.goldType === typeFilter) &&
+    (!query || (getGoldOption(entry.goldType).label + " " + (entry.note || "")).toLocaleLowerCase("tr-TR").includes(query)));
+  const pageCount = Math.max(1,Math.ceil(filteredEntries.length / 10));
+  const currentPage = Math.min(page,pageCount);
+  const visibleEntries = filteredEntries.slice((currentPage - 1) * 10, currentPage * 10);
+
   return (
-    <AppShell title="Yatırımlar" description="Altın birikimini ve güncel değerini bir bakışta takip et." actions={<>
-            <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={() => { void loadEntries(); void loadPrices(); }}
-              disabled={loading || pricesLoading}
-              title="Yenile"
-            >
-              <RefreshCcw size={18} />
-            </button>
-
-      </>}>
-
-
-      <div className="dashboard-grid">
-        <section className="min-w-0 space-y-6">
-          {message ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {message}
+    <AppShell title="Yatırımlar" description="Altın varlıklarını, alış maliyetini ve güncel portföy değerini takip et." actions={<>
+      <button className="btn-secondary" onClick={() => { void loadEntries(); void loadPrices(); }} disabled={loading || pricesLoading}><RefreshCcw size={16} className={loading || pricesLoading ? "animate-spin" : ""} />Verileri yenile</button>
+      <button className="btn-primary" onClick={() => setShowForm(true)}><Plus size={17} />Yatırım ekle</button>
+    </>}>
+      {message ? <div className="notice" role="status"><CircleHelp size={17} /><p>{message}</p><button className="icon-button" aria-label="Bildirimi kapat" onClick={() => setMessage("")}><X size={17} /></button></div> : null}
+      <div className="stats-grid">
+        <StatCard label="Portföy değeri" value={totalCurrentValue !== null ? formatCurrency(totalCurrentValue) : "—"} detail={totalCurrentValue === null ? "Güncel fiyat bilgisi bekleniyor" : "Son alınan altın alış fiyatlarıyla"} icon={Landmark} featured loading={loading || pricesLoading} />
+        <StatCard label="Toplam altın" value={totalGrams.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) + " gr"} detail={total24Grams.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) + " gr 24 ayar · " + total22Grams.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) + " gr 22 ayar"} icon={Coins} loading={loading} />
+        <StatCard label="Alış maliyeti" value={hasAnyCost ? formatCurrency(totalCostValue) : "—"} detail={hasAnyCost ? "Alış fiyatı girilen varlıklar" : "Kayıtlara alış fiyatı ekleyebilirsin"} icon={WalletCards} loading={loading} />
+        <StatCard label="Kâr / zarar" value={profitLoss !== null ? (profitLoss >= 0 ? "+" : "") + formatCurrency(profitLoss) : "—"} detail={missingCostCount ? missingCostCount + " maliyetsiz kayıt hesaplamaya dahil değil" : "Alış maliyeti bilinen varlıklar"} icon={TrendingUp} tone={profitLoss === null ? "default" : profitLoss >= 0 ? "positive" : "negative"} loading={loading || pricesLoading} />
+      </div>
+      <div className="analytics-grid">
+        <section className="panel">
+          <PanelHeading title="Portföy dağılımı" description="Altın türlerine göre gram karşılığı" action={<span className="panel-badge">{entries.length} varlık kaydı</span>} />
+          {loading ? <div className="skeleton chart-skeleton" aria-label="Portföy dağılımı yükleniyor" /> : distribution.length ? <div className="distribution-layout">
+            <div className="donut-wrap" role="img" aria-label={distribution.map((holding) => holding.label + ": " + holding.grams.toLocaleString("tr-TR") + " gram").join(", ")}>
+              <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={distribution} dataKey="grams" nameKey="label" innerRadius="65%" outerRadius="88%" paddingAngle={4} stroke="none" cornerRadius={4} isAnimationActive={false}>{distribution.map((holding,index) => <Cell key={holding.label} fill={holdingColors[index % holdingColors.length]} />)}</Pie><Tooltip formatter={(value) => Number(value).toLocaleString("tr-TR", { maximumFractionDigits: 4 }) + " gr"} /></PieChart></ResponsiveContainer>
+              <div className="donut-center"><strong>{holdings.length}</strong><span>altın türü</span></div>
             </div>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Toplam gram</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {totalGrams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                24 ayar: {total24Grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr · 22
-                ayar: {total22Grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
-              </p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Toplam alış maliyeti</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {hasAnyCost ? formatCurrency(totalCostValue) : "—"}
-              </p>
-              {!hasAnyCost ? (
-                <p className="mt-1 text-xs text-slate-400">Alis fiyati girin</p>
-              ) : null}
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Güncel değer</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {totalCurrentValue !== null ? formatCurrency(totalCurrentValue) : "—"}
-              </p>
-              {totalCurrentValue === null ? (
-                <p className="mt-1 text-xs text-slate-400">
-                  {pricesLoading ? "Alış fiyatları yükleniyor…" : "Alış fiyatları alınamadı"}
-                </p>
-              ) : null}
-            </div>
-            <div className={`rounded-md border p-5 ${profitLoss === null ? "border-slate-200 bg-white" : profitLoss >= 0 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
-              <p className={`text-sm ${profitLoss === null ? "text-slate-500" : profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
-                Kâr / Zarar
-              </p>
-              <p className={`mt-2 text-2xl font-semibold ${profitLoss === null ? "text-slate-950" : profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
-                {profitLoss !== null
-                  ? `${profitLoss >= 0 ? "+" : ""}${formatCurrency(profitLoss)}`
-                  : "—"}
-              </p>
-              {missingCostCount > 0 ? (
-                <p className="mt-1 text-xs text-slate-500">
-                  Alış maliyeti olmayan {missingCostCount} kayıt kâr/zarara dahil edilmedi.
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-md border border-slate-200 bg-white">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-base font-semibold">Altın varlıklarım</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">Ay</th>
-                    <th className="px-5 py-3 font-medium">Altın türü</th>
-                    <th className="px-5 py-3 text-right font-medium">Miktar</th>
-                    <th className="px-5 py-3 text-right font-medium">Gram karşılığı</th>
-                    <th className="px-5 py-3 text-right font-medium">Ayar</th>
-                    <th className="px-5 py-3 text-right font-medium">Alış fiyatı / gr</th>
-                    <th className="px-5 py-3 text-right font-medium">Maliyet</th>
-                    <th className="px-5 py-3 font-medium">Not</th>
-                    <th className="px-5 py-3 text-right font-medium">İşlem</th>
-                    <th className="sticky right-0 bg-amber-50 px-5 py-3 text-right font-medium">Güncel değer</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {entries.map((entry) => {
-                    const option = getGoldOption(entry.goldType);
-                    const cost = entry.pricePerGram !== null ? entry.grams * entry.pricePerGram : null;
-                    const current = goldEntryValue(entry, prices);
-                    return (
-                      <tr key={entry.id} className="hover:bg-slate-50">
-                        <td className="whitespace-nowrap px-5 py-3 font-medium">
-                          {formatMonth(entry.month, entry.year)}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3">{option.label}</td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right">
-                          {entry.quantity.toLocaleString("tr-TR", { maximumFractionDigits: 4 })}{" "}
-                          {option.unit}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right">
-                          {entry.grams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right">{entry.carat} ayar</td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right text-slate-600">
-                          {entry.pricePerGram !== null ? formatCurrency(entry.pricePerGram) : "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right">
-                          {cost !== null ? formatCurrency(cost) : "—"}
-                        </td>
-                        <td className="px-5 py-3 text-slate-500">{entry.note ?? "—"}</td>
-                        <td className="whitespace-nowrap px-5 py-3 text-right">
-                          <button
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-red-700 hover:bg-red-50"
-                            onClick={() => handleDelete(entry.id)}
-                            title="Sil"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                        <td className="sticky right-0 whitespace-nowrap bg-amber-50 px-5 py-3 text-right font-semibold">
-                          {current !== null ? formatCurrency(current) : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!entries.length && !loading ? (
-                <div className="px-5 py-8 text-center text-sm text-slate-500">
-                  Henüz bir altın kaydı yok. İlk birikimini ekleyerek başla.
-                </div>
-              ) : null}
-            </div>
+            <div className="category-list">{distribution.map((holding,index) => <div className="category-item" key={holding.label}><div className="category-label"><span><i style={{background:holdingColors[index % holdingColors.length]}} aria-hidden="true" />{holding.label}</span><b>{holding.grams.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} gr</b></div><div className="category-bar" aria-hidden="true"><span style={{ width: (totalGrams ? holding.grams / totalGrams * 100 : 0) + "%", background:holdingColors[index % holdingColors.length] }} /></div></div>)}</div>
+          </div> : <EmptyState title="Portföyün henüz boş" description="İlk altın kaydını eklediğinde türlere göre dağılımını burada görebilirsin." icon={Coins} action={<button className="btn-text" onClick={() => setShowForm(true)}><Plus size={14} />Yatırım ekle</button>} />}
+        </section>
+        <section className="panel">
+          <PanelHeading title="Altın alış fiyatları" description="AltinAPI · Türk lirası / gram" action={<button className="icon-button" onClick={loadPrices} disabled={pricesLoading} aria-label="Altın fiyatlarını yenile" title="Fiyatları yenile"><RefreshCcw size={15} className={pricesLoading ? "animate-spin" : ""} /></button>} />
+          <div className="panel-body">
+            <div className="market-quotes">{([["24 ayar",prices?.gram24],["22 ayar",prices?.gram22]] as const).map(([label,quote]) => <div className="market-quote" key={label}><span>{label} gram alış</span><strong>{quote ? formatCurrency(quote.bid) : "—"}</strong><small>{quote ? new Date(quote.updatedAt).toLocaleString("tr-TR", { timeZone:"Europe/Istanbul", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : pricesLoading ? "Fiyatlar yükleniyor…" : "Fiyat alınamadı"}</small></div>)}</div>
+            {priceError ? <p className="notice error" role="alert" style={{marginTop:16,marginBottom:0}}>{priceError}</p> : null}
+            {prices?.stale ? <p className="market-notice" role="status"><CircleHelp size={14} />Veri güncel değil; hesaplamada son alınan alış fiyatları kullanılıyor.</p> : prices?.marketClosed ? <p className="market-notice"><CircleHelp size={14} />Piyasa kapalı. Son kayıtlı alış fiyatları gösteriliyor.</p> : null}
+            <p className="market-notice"><ShieldCheck size={14} />Her varlık kendi ayarı ve gram karşılığıyla hesaplanır. Fiyatlar 5 dakika önbellekte tutulur.</p>
           </div>
         </section>
-
-        <aside className="space-y-6">
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <Calculator size={18} className="text-amber-700" />
-              <h2 className="text-base font-semibold text-amber-800">Güncel alış fiyatları</h2>
-            </div>
-            <p className="mb-3 text-xs text-amber-700">
-              AltinAPI alış fiyatlarıyla her kayıt kendi ayarına ve gram karşılığına göre hesaplanır.
-            </p>
-            <div className="space-y-2">
-              {([
-                ["24 ayar gram alış", prices?.gram24],
-                ["22 ayar gram alış", prices?.gram22],
-              ] as const).map(([label, quote]) => (
-                <div key={label} className="rounded-md border border-amber-200 bg-white p-3">
-                  <p className="text-xs text-amber-800">{label}</p>
-                  <p className="mt-1 font-semibold">{quote ? `${formatCurrency(quote.bid)} / gr` : "—"}</p>
-                  {quote ? (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Veri zamanı: {new Date(quote.updatedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={loadPrices}
-                disabled={pricesLoading}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-amber-300 bg-white text-sm text-amber-800 disabled:opacity-50"
-              >
-                <RefreshCcw size={16} className={pricesLoading ? "animate-spin" : ""} />
-                {pricesLoading ? "Fiyatlar yükleniyor…" : "Fiyatları yenile"}
-              </button>
-              <p className="text-xs text-amber-700">Fiyatlar 5 dakika önbellekte tutulur.</p>
-            </div>
-            {priceError ? <p role="alert" className="mt-3 text-sm text-red-700">{priceError}</p> : null}
-            {prices?.stale ? (
-              <p role="status" className="mt-3 text-xs text-amber-900">Kaynak verisi güncel değil; hesaplama son alınan alış fiyatlarını kullanıyor.</p>
-            ) : prices?.marketClosed ? (
-              <p className="mt-3 text-xs text-amber-900">Piyasa kapalı; son kayıtlı alış fiyatları kullanılıyor.</p>
-            ) : null}
-            {totalCurrentValue !== null ? (
-              <div className="mt-3 space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-amber-700">Toplam gram</span>
-                  <span className="font-medium">{totalGrams.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} gr</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-amber-700">Toplam deger</span>
-                  <span className="font-semibold">{formatCurrency(totalCurrentValue)}</span>
-                </div>
-                {hasAnyCost ? (
-                  <div className={`flex justify-between font-semibold ${profitLoss !== null && profitLoss >= 0 ? "text-green-700" : "text-red-700"}`}>
-                    <span>Kâr / Zarar</span>
-                    <span>{profitLoss !== null ? `${profitLoss >= 0 ? "+" : ""}${formatCurrency(profitLoss)}` : "—"}</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <form onSubmit={handleSubmit} className="rounded-md border border-slate-200 bg-white p-5">
+      </div>
+      <section className="panel data-panel">
+        <PanelHeading title="Altın varlıklarım" description={filteredEntries.length + " kayıt · Varlık ve maliyet detayları"} action={<div className="table-tools">
+          <label className="search-input"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Yatırımlarda ara" placeholder="Altın türü veya not ara" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></label>
+          <select aria-label="Altın türü filtresi" value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }}><option value="all">Tüm altın türleri</option>{GOLD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+        </div>} />
+        {loading ? <div aria-label="Yatırım kayıtları yükleniyor" role="status">{[0,1,2].map((row) => <div className="skeleton table-skeleton" key={row} />)}</div> : <>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Altın varlık tablosu"><table className="data-table"><caption className="sr-only">Altın türleri, miktarları, alış maliyetleri ve güncel değerleri</caption><thead><tr><th>Varlık</th><th className="number-cell">Miktar</th><th className="number-cell">Alış maliyeti</th><th className="number-cell">Güncel değer</th><th>Not</th><th className="text-right">İşlem</th></tr></thead><tbody>
+            {visibleEntries.map((entry) => {
+              const option = getGoldOption(entry.goldType);
+              const cost = entry.pricePerGram !== null ? entry.grams * entry.pricePerGram : null;
+              const currentValue = goldEntryValue(entry,prices);
+              return <tr key={entry.id}>
+                <td><div className="gold-type"><span><Coins size={15} aria-hidden="true" /></span><div><strong>{option.label}</strong><small>{formatMonth(entry.month,entry.year)} · {entry.carat} ayar</small></div></div></td>
+                <td className="number-cell">{entry.quantity.toLocaleString("tr-TR", { maximumFractionDigits:4 })} {option.unit}<small className="table-subline">{entry.grams.toLocaleString("tr-TR", { maximumFractionDigits:4 })} gr karşılığı</small></td>
+                <td className="number-cell">{cost !== null ? formatCurrency(cost) : "—"}<small className="table-subline">{entry.pricePerGram !== null ? formatCurrency(entry.pricePerGram) + " / gr" : "Alış fiyatı girilmemiş"}</small></td>
+                <td className="number-cell">{currentValue !== null ? formatCurrency(currentValue) : "—"}{currentValue !== null && cost !== null ? <small className={"table-subline " + (currentValue - cost >= 0 ? "positive" : "negative")}>{currentValue - cost >= 0 ? "+" : ""}{formatCurrency(currentValue-cost)}</small> : null}</td>
+                <td className="note-cell">{entry.note || "—"}</td><td className="row-actions"><button className="delete-action" aria-label={option.label + " kaydını sil"} onClick={() => handleDelete(entry.id)} title="Kaydı sil"><Trash2 size={14} /></button></td>
+              </tr>;
+            })}
+          </tbody></table></div>
+          {!filteredEntries.length ? <EmptyState title={search || typeFilter !== "all" ? "Eşleşen varlık bulunamadı" : "Henüz yatırım kaydı yok"} description={search || typeFilter !== "all" ? "Arama veya altın türü filtresini değiştirebilirsin." : "Altın türünü ve miktarını girerek portföyünü oluşturmaya başlayabilirsin."} icon={Coins} action={!search && typeFilter === "all" ? <button className="btn-secondary" onClick={() => setShowForm(true)}><Plus size={15} />Yatırım ekle</button> : undefined} /> : null}
+        </>}
+        <TablePagination page={currentPage} pages={pageCount} total={filteredEntries.length} pageSize={10} onChange={setPage} />
+      </section>
+      <FormDialog open={showForm} onClose={() => setShowForm(false)} title="Yatırım ekle" description="Altın türünü, miktarını ve varsa alış maliyetini gir.">
+        {message && showForm ? <p className="notice" role="status">{message}</p> : null}
+          <form onSubmit={handleSubmit} aria-busy={saving} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               <Plus size={18} />
               <h2 className="text-base font-semibold">Altın ekle</h2>
@@ -446,17 +336,16 @@ export default function YatirimlarPage() {
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
               /></label>
-              <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-medium text-white hover:bg-amber-700">
+              <button disabled={saving} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-medium text-white hover:bg-amber-700">
                 <Plus size={16} />
-                Kaydet
+                {saving ? "Kaydediliyor…" : "Kaydet"}
               </button>
             </div>
             <p className="mt-3 text-xs text-slate-400">
               Aynı ay için farklı türlerde veya birden fazla altın kaydı ekleyebilirsiniz.
             </p>
           </form>
-        </aside>
-      </div>
+      </FormDialog>
     </AppShell>
   );
 }

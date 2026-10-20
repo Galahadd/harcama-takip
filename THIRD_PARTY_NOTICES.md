@@ -1,5 +1,10 @@
 # Shadcn Admin
 
+The refreshed application dashboard also uses the publicly viewable layout direction of
+[AdminCN on 21st](https://21st.dev/community/templates/admincn-shadcn-admin-dashboard-template)
+as a visual reference. No AdminCN source code was retrieved or incorporated.
+The ambient dashboard background is original CSS. Plus Jakarta Sans is loaded through Google Fonts.
+
 The navigation and dashboard layout are adapted from the design of
 [Shadcn Admin](https://github.com/satnaing/shadcn-admin) for this Next.js application.
 

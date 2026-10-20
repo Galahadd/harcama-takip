@@ -16,19 +16,28 @@ export const categories = [
 ];
 
 export const bankOptions = [
-  { value: "all", label: "Tum bankalar" },
+  { value: "all", label: "Tüm bankalar" },
   { value: "garanti", label: "Garanti BBVA" },
-  { value: "yapikredi", label: "Yapi Kredi" },
+  { value: "yapikredi", label: "Yapı Kredi" },
   { value: "manual", label: "Manuel" },
 ] as const;
 
 export const uploadBankOptions = [
   { value: "garanti", label: "Garanti BBVA" },
-  { value: "yapikredi", label: "Yapi Kredi" },
+  { value: "yapikredi", label: "Yapı Kredi" },
 ] as const;
 
 export function formatBank(bank: string) {
   return bankOptions.find((option) => option.value === bank)?.label ?? "Bilinmeyen";
+}
+
+export function formatCategory(category: string) {
+  const labels: Record<string, string> = {
+    "Yeme Icme": "Yeme İçme", Ulasim: "Ulaşım", Saglik: "Sağlık",
+    "Online Alisveris": "Online Alışveriş", Eglence: "Eğlence", "Kisisel Hizmet": "Kişisel Hizmet",
+    Egitim: "Eğitim", Diger: "Diğer",
+  };
+  return labels[category] || category;
 }
 
 export function formatCurrency(amount: number) {

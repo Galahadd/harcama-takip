@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Cell,
   Pie,
@@ -10,6 +10,17 @@ import {
 } from "recharts";
 import {
   FileUp,
+  ArrowDownLeft,
+  CalendarDays,
+  ChartNoAxesColumn,
+  CheckCircle2,
+  CircleHelp,
+  CreditCard,
+  Layers3,
+  Search,
+  SlidersHorizontal,
+  WalletCards,
+  X,
   Pencil,
   Plus,
   RefreshCcw,
@@ -19,7 +30,8 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { sessionFetch } from "@/lib/session-fetch";
 import clsx from "clsx";
-import { categories, currentMonthOption, formatCurrency, formatMonth } from "@/lib/format";
+import { EmptyState, FormDialog, PanelHeading, StatCard, TablePagination } from "@/components/finance-ui";
+import { categories, currentMonthOption, formatCategory, formatCurrency, formatMonth } from "@/lib/format";
 import {
   bankOptions,
   formatBank,
@@ -36,11 +48,11 @@ import type {
 } from "@/lib/types";
 
 const chartColors = [
-  "#0f766e",
-  "#b45309",
-  "#2563eb",
-  "#be123c",
-  "#4d7c0f",
+  "#7a68dd",
+  "#3c9c91",
+  "#e5b35a",
+  "#7395cc",
+  "#ba78af",
   "#7c3aed",
   "#0891b2",
   "#ca8a04",
@@ -108,24 +120,36 @@ export default function Home() {
   const [uploadYear, setUploadYear] = useState(previousMonth.getFullYear());
   const [previewRows, setPreviewRows] = useState<ParsedExpense[]>([]);
   const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [completionMessage, setCompletionMessage] = useState("");
+  const [activePanel, setActivePanel] = useState<"expense" | "statement" | null>(null);
+  const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [expandedCategories, setExpandedCategories] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
+  const summaryRequest = useRef(0);
 
   async function loadSummary(month = selectedMonth, year = selectedYear, bank = selectedBank) {
+    const requestId = ++summaryRequest.current;
     setLoading(true);
     setMessage("");
-    const response = await sessionFetch(`/api/summary?month=${month}&year=${year}&bank=${bank}`);
-    if (!response) return;
-    const data = await response.json();
-    if (!response.ok) {
-      setMessage(data.error || "Veri alinamadi.");
-    } else {
+    try {
+      const response = await sessionFetch(`/api/summary?month=${month}&year=${year}&bank=${bank}`);
+      if (!response) return;
+      const data = await response.json();
+      if (requestId !== summaryRequest.current) return;
+      if (!response.ok) throw new Error(data.error || "Veri alınamadı.");
       setSummary(data);
       setSelectedExpenseIds(new Set());
+    } catch (error) {
+      if (requestId === summaryRequest.current) setMessage(error instanceof Error ? error.message : "Bağlantı kurulamadı. Yeniden deneyin.");
+    } finally {
+      if (requestId === summaryRequest.current) setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -143,7 +167,11 @@ export default function Home() {
   }, [summary.months, selectedMonth, selectedYear]);
 
   const sortedExpenses = useMemo(() => {
-    return [...summary.expenses].sort((a, b) => {
+    const query = search.trim().toLocaleLowerCase("tr-TR");
+    return summary.expenses.filter((expense) =>
+      (sourceFilter === "all" || expense.source === sourceFilter) &&
+      (!query || (expense.description + " " + formatCategory(expense.category) + " " + expense.category + " " + formatBank(expense.bank)).toLocaleLowerCase("tr-TR").includes(query))
+    ).sort((a, b) => {
       const direction = sortDirection === "asc" ? 1 : -1;
 
       if (sortKey === "amount") {
@@ -156,11 +184,20 @@ export default function Home() {
 
       return a.date.localeCompare(b.date) * direction;
     });
-  }, [summary.expenses, sortDirection, sortKey]);
+  }, [summary.expenses, sortDirection, sortKey, search, sourceFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(sortedExpenses.length / 10));
+  const currentPage = Math.min(page, pageCount);
+  const visibleExpenses = sortedExpenses.slice((currentPage - 1) * 10, currentPage * 10);
+  const groupedCategories = summary.categoryTotals.length > 5
+    ? [...summary.categoryTotals.slice(0, 4), { category: "Diğer kategoriler", total: summary.categoryTotals.slice(4).reduce((sum, item) => sum + item.total, 0) }]
+    : summary.categoryTotals;
+  const categoryRows = expandedCategories ? summary.categoryTotals : groupedCategories;
+  const installmentMonths = summary.installmentSummary.monthlyInstallmentTotals.slice(0, 6);
 
   const allVisibleSelected =
-    sortedExpenses.some((expense) => !expense.projected) &&
-    sortedExpenses.filter((expense) => !expense.projected).every((expense) => selectedExpenseIds.has(expense.id));
+    visibleExpenses.some((expense) => !expense.projected) &&
+    visibleExpenses.filter((expense) => !expense.projected).every((expense) => selectedExpenseIds.has(expense.id));
 
   function toggleExpenseSelection(id: string) {
     setSelectedExpenseIds((currentIds) => {
@@ -177,11 +214,13 @@ export default function Home() {
   function toggleAllVisibleExpenses() {
     setSelectedExpenseIds((currentIds) => {
       if (allVisibleSelected) {
-        return new Set();
+        const next = new Set(currentIds);
+        for (const expense of visibleExpenses) next.delete(expense.id);
+        return next;
       }
 
       const next = new Set(currentIds);
-      for (const expense of sortedExpenses) {
+      for (const expense of visibleExpenses) {
         if (!expense.projected) {
           next.add(expense.id);
         }
@@ -191,38 +230,49 @@ export default function Home() {
   }
 
   async function saveManualExpense(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const payload = {
-      ...manualForm,
-      amount: Number(manualForm.amount),
-    };
 
-    const url = editing ? `/api/expenses/${editing.id}` : "/api/expenses";
-    const response = await sessionFetch(url, {
-      method: editing ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response) return;
-    const data = await response.json();
+    if (saving) { event.preventDefault(); return; }
+    setSaving(true);
+    setMessage("");
+    try {
+      event.preventDefault();
+      const payload = {
+        ...manualForm,
+        amount: Number(manualForm.amount),
+      };
 
-    if (!response.ok) {
-      setMessage(data.error || "Harcama kaydedilemedi.");
-      return;
+      const url = editing ? `/api/expenses/${editing.id}` : "/api/expenses";
+      const response = await sessionFetch(url, {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response) return;
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error || "Harcama kaydedilemedi.");
+        return;
+      }
+
+      const date = new Date(manualForm.date);
+      setSelectedMonth(date.getMonth() + 1);
+      setSelectedYear(date.getFullYear());
+      setManualForm({
+        date: new Date().toISOString().slice(0, 10),
+        description: "",
+        amount: "",
+        category: "Diger",
+      });
+      setEditing(null);
+      setActivePanel(null);
+      setMessage(editing ? "Harcama güncellendi." : "Harcama eklendi.");
+      await loadSummary(date.getMonth() + 1, date.getFullYear());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bağlantı kurulamadı. Lütfen tekrar dene.");
+    } finally {
+      setSaving(false);
     }
-
-    const date = new Date(manualForm.date);
-    setSelectedMonth(date.getMonth() + 1);
-    setSelectedYear(date.getFullYear());
-    setManualForm({
-      date: new Date().toISOString().slice(0, 10),
-      description: "",
-      amount: "",
-      category: "Diger",
-    });
-    setEditing(null);
-    setMessage(editing ? "Harcama guncellendi." : "Harcama eklendi.");
-    await loadSummary(date.getMonth() + 1, date.getFullYear());
   }
 
   async function deleteExpense(id: string) {
@@ -289,71 +339,90 @@ export default function Home() {
   }
 
   async function previewPdf(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!pdfFile) {
-      setMessage("Ekstre dosyasi secin.");
-      return;
+
+
+    try {
+      event.preventDefault();
+      if (!pdfFile) {
+        setMessage("Ekstre dosyası seçin.");
+        return;
+      }
+
+      setPreviewing(true);
+      setMessage("");
+      const formData = new FormData();
+      formData.set("file", pdfFile);
+      formData.set("bank", uploadBank);
+      const response = await sessionFetch("/api/statements/preview", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response) return;
+      const data = await response.json();
+      setPreviewing(false);
+
+      if (!response.ok) {
+        setMessage(data.error || "Ekstre okunamadı.");
+        return;
+      }
+
+      setPreviewRows(data.rows);
+      setMessage(`${data.rows.length} harcama bulundu.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bağlantı kurulamadı. Lütfen tekrar dene.");
+    } finally {
+      setPreviewing(false);
     }
-
-    setPreviewing(true);
-    setMessage("");
-    const formData = new FormData();
-    formData.set("file", pdfFile);
-    formData.set("bank", uploadBank);
-    const response = await sessionFetch("/api/statements/preview", {
-      method: "POST",
-      body: formData,
-    });
-    if (!response) return;
-    const data = await response.json();
-    setPreviewing(false);
-
-    if (!response.ok) {
-      setMessage(data.error || "Ekstre okunamadi.");
-      return;
-    }
-
-    setPreviewRows(data.rows);
-    setMessage(`${data.rows.length} harcama bulundu.`);
   }
 
   async function importPdf() {
-    if (!pdfFile || previewRows.length === 0) {
-      setMessage("Ice aktarmak icin once PDF onizlemesi alin.");
-      return;
+
+    if (importing) return;
+    setImporting(true);
+    try {
+      if (!pdfFile || previewRows.length === 0) {
+        setMessage("İçe aktarmak için önce ekstre önizlemesi alın.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.set("file", pdfFile);
+      formData.set("month", String(uploadMonth));
+      formData.set("year", String(uploadYear));
+      formData.set("bank", uploadBank);
+      formData.set("rows", JSON.stringify(previewRows));
+
+      const response = await sessionFetch("/api/statements/import", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response) return;
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error || "Ekstre içe aktarılamadı.");
+        return;
+      }
+
+      setPreviewRows([]);
+      setPdfFile(null);
+      const doneMessage = `${data.inserted} yeni harcama kaydedildi.`;
+      setSelectedMonth(uploadMonth);
+      setSelectedYear(uploadYear);
+      setMessage(doneMessage);
+      setCompletionMessage(doneMessage);
+      setActivePanel(null);
+      await loadSummary(uploadMonth, uploadYear);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Bağlantı kurulamadı. Lütfen tekrar dene.");
+    } finally {
+      setImporting(false);
     }
-
-    const formData = new FormData();
-    formData.set("file", pdfFile);
-    formData.set("month", String(uploadMonth));
-    formData.set("year", String(uploadYear));
-    formData.set("bank", uploadBank);
-    formData.set("rows", JSON.stringify(previewRows));
-
-    const response = await sessionFetch("/api/statements/import", {
-      method: "POST",
-      body: formData,
-    });
-    if (!response) return;
-    const data = await response.json();
-
-    if (!response.ok) {
-      setMessage(data.error || "Ekstre ice aktarilamadi.");
-      return;
-    }
-
-    setPreviewRows([]);
-    setPdfFile(null);
-    const doneMessage = `${data.inserted} yeni harcama kaydedildi.`;
-    setSelectedMonth(uploadMonth);
-    setSelectedYear(uploadYear);
-    setMessage(doneMessage);
-    setCompletionMessage(doneMessage);
-    await loadSummary(uploadMonth, uploadYear);
   }
 
-
   function startEdit(expense: Expense) {
+    setMessage("");
+    setActivePanel("expense");
     setEditing(expense);
     setManualForm({
       date: expense.date,
@@ -363,285 +432,85 @@ export default function Home() {
     });
   }
 
+  function openExpense() {
+    setEditing(null);
+    setMessage("");
+    setManualForm({ date: new Date().toISOString().slice(0, 10), description: "", amount: "", category: "Diger" });
+    setActivePanel("expense");
+  }
+
   return (
-    <AppShell title="Harcamalar" description="Aylık harcamaların, taksitlerin ve ekstrelerin tek bir yerde." actions={<>
-            <select aria-label="Ay seçimi"
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
-              value={`${selectedYear}-${selectedMonth}`}
-              onChange={(event) => {
-                const [year, month] = event.target.value.split("-").map(Number);
-                setSelectedYear(year);
-                setSelectedMonth(month);
-              }}
-            >
-              {monthOptions.map((option) => (
-                <option key={`${option.year}-${option.month}`} value={`${option.year}-${option.month}`}>
-                  {formatMonth(option.month, option.year)}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
-              aria-label="Banka filtresi"
-              value={selectedBank}
-              onChange={(event) => setSelectedBank(event.target.value)}
-            >
-              {bankOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              onClick={() => loadSummary()}
-              title="Yenile"
-            >
-              <RefreshCcw size={18} />
-            </button>
-
-      </>}>
-      {completionMessage ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-sm rounded-md bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">İçe aktarma tamamlandı</h2>
-            <p className="mt-2 text-sm text-slate-600">{completionMessage}</p>
-            <button
-              className="mt-5 h-10 w-full rounded-md bg-teal-700 text-sm font-medium text-white hover:bg-teal-800"
-              onClick={() => setCompletionMessage("")}
-            >
-              Tamam
-            </button>
-          </div>
+    <AppShell title="Harcamalar" description="Aylık harcamalarını, ekstrelerini ve taksitlerini takip et." actions={<>
+      <button className="btn-secondary" onClick={() => setActivePanel("statement")}><FileUp size={16} />Ekstre yükle</button>
+      <button className="btn-primary" onClick={openExpense}><Plus size={17} />Harcama ekle</button>
+    </>}>
+      <div className="filter-bar">
+        <div className="filter-controls">
+          <span className="filter-label"><SlidersHorizontal size={15} />Görünüm</span>
+          <label className="filter-field"><span>Dönem</span><select aria-label="Ay seçimi" value={selectedYear + "-" + selectedMonth} onChange={(event) => {
+            const [year, month] = event.target.value.split("-").map(Number); setSelectedYear(year); setSelectedMonth(month); setPage(1);
+          }}>{monthOptions.map((option) => <option key={option.year + "-" + option.month} value={option.year + "-" + option.month}>{formatMonth(option.month, option.year)}</option>)}</select></label>
+          <label className="filter-field"><span>Banka</span><select aria-label="Banka filtresi" value={selectedBank} onChange={(event) => { setSelectedBank(event.target.value); setPage(1); }}>{bankOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         </div>
-      ) : null}
-
-
-      <div className="dashboard-grid">
-        <section className="min-w-0 space-y-6">
-          {message ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {message}
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Seçili dönem</p>
-              <p className="mt-2 text-2xl font-semibold">{formatMonth(selectedMonth, selectedYear)}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">Toplam harcama</p>
-              <p className="mt-2 text-2xl font-semibold">{formatCurrency(summary.total)}</p>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">İşlem sayısı</p>
-              <p className="mt-2 text-2xl font-semibold">{summary.expenses.length}</p>
-            </div>
-          </div>
-
-          <div className="grid gap-6 xl:grid-cols-2">
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h2 className="text-base font-semibold">Harcama dağılımı</h2>
-              <div className="mt-4 h-72">
-                {summary.categoryTotals.length ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={summary.categoryTotals}
-                        dataKey="total"
-                        nameKey="category"
-                        innerRadius={68}
-                        outerRadius={104}
-                        paddingAngle={2}
-                      >
-                        {summary.categoryTotals.map((entry, index) => (
-                          <Cell key={entry.category} fill={chartColors[index % chartColors.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                    Bu ay için henüz veri yok.
-                  </div>
-                )}
+        <div className="filter-meta"><CalendarDays size={14} /><span>{formatMonth(selectedMonth, selectedYear)}</span><button className="icon-button" onClick={() => loadSummary()} disabled={loading} aria-label="Harcama verilerini yenile" title="Verileri yenile"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} /></button></div>
+      </div>
+      {completionMessage ? <div className="notice success" role="status"><CheckCircle2 size={18} /><p>{completionMessage}</p><button className="icon-button" aria-label="Bildirimi kapat" onClick={() => { setCompletionMessage(""); setMessage(""); }}><X size={17} /></button></div> : message ? <div className="notice" role="status"><CircleHelp size={17} /><p>{message}</p><button className="icon-button" aria-label="Bildirimi kapat" onClick={() => setMessage("")}><X size={17} /></button></div> : null}
+      <div className="stats-grid">
+        <StatCard label="Toplam harcama" value={formatCurrency(summary.total)} detail={summary.expenses.some((item) => item.projected) ? "Planlanan taksitler dahil" : "Seçili dönemdeki toplam tutar"} icon={WalletCards} featured loading={loading} />
+        <StatCard label="İşlem sayısı" value={summary.expenses.length.toLocaleString("tr-TR")} detail={summary.expenses.filter((item) => item.projected).length + " planlanan taksit"} icon={ArrowDownLeft} loading={loading} />
+        <StatCard label="Gelecek ay taksit" value={formatCurrency(summary.installmentSummary.nextMonthTotal)} detail="Kayıtlardan hesaplanan ödeme" icon={CreditCard} loading={loading} />
+        <StatCard label="Kategori sayısı" value={summary.categoryTotals.length} detail="Seçili dönemde harcama yapılan" icon={Layers3} loading={loading} />
+      </div>
+      <div className="analytics-grid">
+        <section className="panel">
+          <PanelHeading title="Harcama dağılımı" description="Toplam tutarın kategorilere göre dağılımı" action={<span className="panel-badge">{formatMonth(selectedMonth, selectedYear)}</span>} />
+          {loading ? <div className="skeleton chart-skeleton" aria-label="Harcama dağılımı yükleniyor" /> : summary.categoryTotals.length ? <>
+            <div className="distribution-layout">
+              <div className="donut-wrap" role="img" aria-label={summary.categoryTotals.length + " kategori için harcama dağılımı. Tutarlar yanındaki listede gösterilir."}>
+                <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groupedCategories.map((item) => ({ ...item, category: formatCategory(item.category) }))} dataKey="total" nameKey="category" innerRadius="65%" outerRadius="88%" paddingAngle={4} stroke="none" cornerRadius={4} isAnimationActive={false}>{groupedCategories.map((entry, index) => <Cell key={entry.category} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => formatCurrency(Number(value))} /></PieChart></ResponsiveContainer>
+                <div className="donut-center"><strong>{summary.categoryTotals.length}</strong><span>kategori</span></div>
               </div>
+              <div className="category-list">{categoryRows.map((item, index) => <div key={item.category} className="category-item"><div className="category-label"><span><i style={{ background: chartColors[index % chartColors.length] }} aria-hidden="true" />{formatCategory(item.category)}</span><b>{formatCurrency(item.total)}</b></div><div className="category-bar" aria-hidden="true"><span style={{ width: (summary.total ? item.total / summary.total * 100 : 0) + "%", background: chartColors[index % chartColors.length] }} /></div></div>)}
+              {summary.categoryTotals.length > 5 ? <button className="btn-text" onClick={() => setExpandedCategories(!expandedCategories)} aria-expanded={expandedCategories}>{expandedCategories ? "Daha az göster" : "Tüm kategorileri göster"}</button> : null}</div>
             </div>
-
-            <div className="rounded-md border border-slate-200 bg-white p-5">
-              <h2 className="text-base font-semibold">Kategoriler</h2>
-              <div className="mt-4 space-y-3">
-                {summary.categoryTotals.map((item, index) => (
-                  <div key={item.category} className="grid grid-cols-[1fr_auto] items-center gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-3 w-3 rounded-sm"
-                          style={{ backgroundColor: chartColors[index % chartColors.length] }}
-                        />
-                        <span className="truncate text-sm font-medium">{item.category}</span>
-                      </div>
-                      <div className="mt-1 h-2 rounded-full bg-slate-100">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: `${summary.total ? (item.total / summary.total) * 100 : 0}%`,
-                            backgroundColor: chartColors[index % chartColors.length],
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold">{formatCurrency(item.total)}</span>
-                  </div>
-                ))}
-                {!summary.categoryTotals.length ? (
-                  <p className="text-sm text-slate-500">Bu dönem için kategori verisi bulunmuyor.</p>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-md border border-slate-200 bg-white">
-            <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
-              <h2 className="text-base font-semibold">İşlem geçmişi</h2>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                  aria-label="Sıralama alanı"
-                  value={sortKey}
-                  onChange={(event) => setSortKey(event.target.value as SortKey)}
-                >
-                  <option value="date">Tarihe göre</option>
-                  <option value="amount">Tutara göre</option>
-                  <option value="category">Kategoriye göre</option>
-                </select>
-                <select
-                  className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                  aria-label="Sıralama yönü"
-                  value={sortDirection}
-                  onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-                >
-                  <option value="desc">Azalan</option>
-                  <option value="asc">Artan</option>
-                </select>
-                <button
-                  className="h-9 rounded-md border border-slate-300 px-3 text-sm hover:bg-slate-50"
-                  onClick={deleteSelectedExpenses}
-                >
-                  Seçilenleri sil
-                </button>
-                <button
-                  className="h-9 rounded-md border border-red-300 px-3 text-sm text-red-700 hover:bg-red-50"
-                  onClick={deleteCurrentMonthExpenses}
-                >
-                  Ayı sil
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={allVisibleSelected}
-                        onChange={toggleAllVisibleExpenses}
-                        aria-label="Tum harcamalari sec"
-                      />
-                    </th>
-                    <th className="px-5 py-3 font-medium">Tarih</th>
-                    <th className="px-5 py-3 font-medium">Açıklama</th>
-                    <th className="px-5 py-3 font-medium">Kategori</th>
-                    <th className="px-5 py-3 font-medium">Banka</th>
-                    <th className="px-5 py-3 text-right font-medium">Tutar</th>
-                    <th className="px-5 py-3 font-medium">Kaynak</th>
-                    <th className="px-5 py-3 text-right font-medium">İşlem</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {sortedExpenses.map((expense) => (
-                    <tr key={expense.id} className="hover:bg-slate-50">
-                      <td className="whitespace-nowrap px-5 py-3">
-                        <input
-                          type="checkbox"
-                          checked={!expense.projected && selectedExpenseIds.has(expense.id)}
-                          onChange={() => toggleExpenseSelection(expense.id)}
-                          disabled={expense.projected}
-                          aria-label="Harcama sec"
-                        />
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3">{expense.date}</td>
-                      <td className="min-w-64 px-5 py-3">
-                        <div>{expense.description}</div>
-                        {expense.installmentCurrent && expense.installmentTotal ? (
-                          <span className="mt-1 inline-flex rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                            {expense.installmentCurrent}/{expense.installmentTotal} taksit
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3">{expense.category}</td>
-                      <td className="whitespace-nowrap px-5 py-3">{formatBank(expense.bank)}</td>
-                      <td className="whitespace-nowrap px-5 py-3 text-right font-medium">
-                        {formatCurrency(expense.amount)}
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3">
-                        <span
-                          className={clsx(
-                            "rounded-md px-2 py-1 text-xs font-medium",
-                            expense.source === "projected"
-                              ? "bg-amber-50 text-amber-700"
-                              : expense.source === "pdf"
-                              ? "bg-blue-50 text-blue-700"
-                              : "bg-teal-50 text-teal-700",
-                          )}
-                        >
-                          {expense.source === "projected"
-                            ? "Planlanan"
-                            : expense.source === "pdf"
-                              ? "PDF"
-                              : "Manuel"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-right">
-                        {expense.projected ? (
-                          <span className="text-xs text-slate-400">Plan</span>
-                        ) : (
-                          <>
-                            <button
-                              className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 hover:bg-slate-50"
-                              onClick={() => startEdit(expense)}
-                              title="Duzenle"
-                            >
-                              <Pencil size={15} />
-                            </button>
-                            <button
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-red-700 hover:bg-red-50"
-                              onClick={() => deleteExpense(expense.id)}
-                              title="Sil"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!summary.expenses.length && !loading ? (
-                <div className="px-5 py-8 text-center text-sm text-slate-500">
-                  Bu ay icin harcama kaydi yok.
-                </div>
-              ) : null}
-            </div>
-          </div>
+          </> : <EmptyState title="Henüz dağılım verisi yok" description="Harcama eklediğinde kategori dağılımını burada görebilirsin." icon={ChartNoAxesColumn} action={<button className="btn-text" onClick={openExpense}><Plus size={14} />Harcama ekle</button>} />}
         </section>
-
-        <aside className="space-y-6">
-          <form onSubmit={saveManualExpense} className="rounded-md border border-slate-200 bg-white p-5">
+        <section className="panel">
+          <PanelHeading title="Taksit planı" description="Kayıtlı ekstrelerden hesaplanan aylık ödemeler" action={<span className="panel-badge"><CreditCard size={11} />Planlanan</span>} />
+          {loading ? <div className="skeleton chart-skeleton" aria-label="Taksit planı yükleniyor" /> : installmentMonths.length ? <div className="panel-body">
+            <div className="monthly-bars" role="img" aria-label={installmentMonths.map((month) => formatMonth(month.month, month.year) + ": " + formatCurrency(month.total)).join(", ")}>{installmentMonths.map((item) => <div className="monthly-bar" key={item.year + "-" + item.month} title={formatMonth(item.month, item.year) + ": " + formatCurrency(item.total)}><div style={{ height: Math.max(4, item.total / (summary.installmentSummary.maxMonthlyTotal || 1) * 100) + "%" }} /><span>{formatMonth(item.month, item.year).split(" ")[0].slice(0,3)}</span></div>)}</div>
+            <div className="installment-summary"><span>Kalan taksit toplamı</span><strong>{formatCurrency(summary.installmentSummary.remainingTotal)}</strong></div>
+            <p className="market-notice">Yeni ekstreler yüklendiğinde taksit planı güncellenir.</p>
+          </div> : <EmptyState title="Gelecek taksit bulunmuyor" description="Taksitli işlemler içeren bir ekstre yüklediğinde ödeme planın burada görünür." icon={CreditCard} />}
+        </section>
+      </div>
+      <section className="panel data-panel">
+        <PanelHeading title="İşlem geçmişi" description={sortedExpenses.length + " kayıt · " + formatMonth(selectedMonth, selectedYear)} action={<div className="table-tools">
+          <label className="search-input"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Harcamalarda ara" placeholder="İşlem veya kategori ara" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></label>
+          <select aria-label="Kayıt kaynağı" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">Tüm kaynaklar</option><option value="manual">Manuel</option><option value="pdf">Ekstre</option><option value="projected">Planlanan</option></select>
+          <select aria-label="Sıralama alanı" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)}><option value="date">Tarih</option><option value="amount">Tutar</option><option value="category">Kategori</option></select>
+          <select aria-label="Sıralama yönü" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as SortDirection)}><option value="desc">Azalan</option><option value="asc">Artan</option></select>
+        </div>} />
+        <div className="table-selection"><span>{selectedExpenseIds.size ? selectedExpenseIds.size + " işlem seçildi" : "Düzenlemek veya silmek için bir işlem seç."}</span><div className="flex gap-2"><button className="btn-danger" disabled={!selectedExpenseIds.size} onClick={deleteSelectedExpenses}><Trash2 size={13} />Seçilenleri sil</button><button className="btn-text" onClick={deleteCurrentMonthExpenses}>Ayın kayıtlarını sil</button></div></div>
+        {loading ? <div aria-label="İşlemler yükleniyor" role="status">{[0,1,2].map((row) => <div className="skeleton table-skeleton" key={row} />)}</div> : <>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Harcama tablosu"><table className="data-table"><caption className="sr-only">Seçili dönemin harcamaları ve planlanan taksitleri</caption><thead><tr>
+            <th><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleExpenses} aria-label="Bu sayfadaki harcamaları seç" /></th><th aria-sort={sortKey === "date" ? sortDirection === "asc" ? "ascending" : "descending" : undefined}>Tarih</th><th>Açıklama</th><th aria-sort={sortKey === "category" ? sortDirection === "asc" ? "ascending" : "descending" : undefined}>Kategori</th><th>Banka</th><th>Kaynak</th><th className="number-cell" aria-sort={sortKey === "amount" ? sortDirection === "asc" ? "ascending" : "descending" : undefined}>Tutar</th><th className="text-right">İşlem</th>
+          </tr></thead><tbody>{visibleExpenses.map((expense) => <tr key={expense.id}>
+            <td><input type="checkbox" checked={!expense.projected && selectedExpenseIds.has(expense.id)} disabled={expense.projected} onChange={() => toggleExpenseSelection(expense.id)} aria-label={expense.description + " harcamasını seç"} /></td>
+            <td className="date-cell">{new Date(expense.date + "T12:00:00").toLocaleDateString("tr-TR", { day: "2-digit", month: "short", year: "numeric" })}</td>
+            <td className="description-cell"><div>{expense.description}</div>{expense.installmentCurrent && expense.installmentTotal ? <span className="installment-tag">{expense.installmentCurrent}/{expense.installmentTotal} taksit</span> : null}</td>
+            <td>{formatCategory(expense.category)}</td><td className="whitespace-nowrap">{formatBank(expense.bank)}</td>
+            <td><span className={clsx("source-badge", expense.source)}>{expense.source === "projected" ? "Planlanan" : expense.source === "pdf" ? "Ekstre" : "Manuel"}</span></td>
+            <td className="number-cell">{formatCurrency(expense.amount)}</td>
+            <td className="row-actions">{expense.projected ? <span className="source-badge">Plan</span> : <><button onClick={() => startEdit(expense)} aria-label={expense.description + " harcamasını düzenle"} title="Düzenle"><Pencil size={14} /></button><button className="delete-action" onClick={() => deleteExpense(expense.id)} aria-label={expense.description + " harcamasını sil"} title="Sil"><Trash2 size={14} /></button></>}</td>
+          </tr>)}</tbody></table></div>
+          {!sortedExpenses.length ? <EmptyState title={search || sourceFilter !== "all" ? "Eşleşen işlem bulunamadı" : "Bu dönemde işlem bulunmuyor"} description={search || sourceFilter !== "all" ? "Farklı bir arama veya kaynak filtresi deneyebilirsin." : "Manuel harcama ekleyebilir veya bir banka ekstresi yükleyebilirsin."} action={!search && sourceFilter === "all" ? <button className="btn-secondary" onClick={() => setActivePanel("statement")}><FileUp size={15} />Ekstre yükle</button> : undefined} /> : null}
+        </>}
+        <TablePagination page={currentPage} pages={pageCount} total={sortedExpenses.length} pageSize={10} onChange={setPage} />
+      </section>
+      <FormDialog open={activePanel === "expense"} onClose={() => { setActivePanel(null); setEditing(null); }} title={editing ? "Harcamayı düzenle" : "Harcama ekle"} description="Tutar ve kategori bilgilerini girerek işlemi hesabına kaydet.">
+        {message && activePanel === "expense" ? <p className="notice" role="status">{message}</p> : null}
+          <form onSubmit={saveManualExpense} aria-busy={saving} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               {editing ? <Save size={18} /> : <Plus size={18} />}
               <h2 className="text-base font-semibold">{editing ? "Harcamayı düzenle" : "Harcama ekle"}</h2>
@@ -677,39 +546,42 @@ export default function Home() {
                 onChange={(event) => setManualForm({ ...manualForm, category: event.target.value })}
               >
                 {categories.map((category) => (
-                  <option key={category}>{category}</option>
+                  <option key={category} value={category}>{formatCategory(category)}</option>
                 ))}
               </select></label>
               <div className="flex gap-2">
-                <button className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800">
+                <button disabled={saving} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800">
                   {editing ? <Save size={16} /> : <Plus size={16} />}
-                  Kaydet
+                  {saving ? "Kaydediliyor…" : "Kaydet"}
                 </button>
                 {editing ? (
                   <button
                     type="button"
                     className="h-10 rounded-md border border-slate-300 px-3 text-sm"
-                    onClick={() => setEditing(null)}
+                    onClick={() => { setEditing(null); setActivePanel(null); }}
                   >
-                    Iptal
+                    İptal
                   </button>
                 ) : null}
               </div>
             </div>
           </form>
-
+      </FormDialog>
+      <FormDialog open={activePanel === "statement"} onClose={() => setActivePanel(null)} title="Ekstre yükle" description="PDF veya Excel dosyanı seç, işlemleri kontrol ederek içe aktar.">
+        {message && activePanel === "statement" ? <p className="notice" role="status">{message}</p> : null}
           <form onSubmit={previewPdf} className="rounded-md border border-slate-200 bg-white p-5">
             <div className="mb-4 flex items-center gap-2">
               <FileUp size={18} />
               <h2 className="text-base font-semibold">Ekstre yükle</h2>
             </div>
             <div className="space-y-3">
-              <input
+              <label className="block"><span className="form-label">Ekstre dosyası</span><input
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 type="file"
                 accept="application/pdf,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                onChange={(event) => setPdfFile(event.target.files?.[0] || null)}
-              />
+                disabled={previewing || importing}
+                onChange={(event) => { setPdfFile(event.target.files?.[0] || null); setPreviewRows([]); setMessage(""); }}
+              /></label>
               <div className="grid grid-cols-[1fr_96px] gap-2">
                 <label className="block min-w-0"><span className="form-label">Ekstre ayı</span><select
                   className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
@@ -734,7 +606,8 @@ export default function Home() {
               <label className="block min-w-0"><span className="form-label">Banka</span><select
                 className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                 value={uploadBank}
-                onChange={(event) => setUploadBank(event.target.value as Bank)}
+                disabled={previewing || importing}
+                onChange={(event) => { setUploadBank(event.target.value as Bank); setPreviewRows([]); setMessage(""); }}
               >
                 {uploadBankOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -742,7 +615,7 @@ export default function Home() {
                   </option>
                 ))}
               </select></label>
-              <button className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
+              <button disabled={previewing || !pdfFile} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium hover:bg-slate-50">
                 <FileUp size={16} />
                 {previewing ? "Okunuyor..." : "Önizleme al"}
               </button>
@@ -755,9 +628,10 @@ export default function Home() {
                 <h2 className="text-base font-semibold">Ekstre önizleme</h2>
                 <button
                   className="h-9 rounded-md bg-teal-700 px-3 text-sm font-medium text-white hover:bg-teal-800"
+                  disabled={importing}
                   onClick={importPdf}
                 >
-                  Ice aktar
+                  {importing ? "İçe aktarılıyor…" : "İçe aktar"}
                 </button>
               </div>
               <div className="max-h-96 space-y-3 overflow-auto pr-1">
@@ -776,6 +650,7 @@ export default function Home() {
                       <p className="whitespace-nowrap text-sm font-semibold">{formatCurrency(row.amount)}</p>
                     </div>
                     <select
+                      aria-label={row.description + " kategorisi"}
                       className="mt-3 h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-sm"
                       value={row.category}
                       onChange={(event) => {
@@ -785,7 +660,7 @@ export default function Home() {
                       }}
                     >
                       {categories.map((category) => (
-                        <option key={category}>{category}</option>
+                        <option key={category} value={category}>{formatCategory(category)}</option>
                       ))}
                     </select>
                   </div>
@@ -793,8 +668,8 @@ export default function Home() {
               </div>
             </div>
           ) : null}
-        </aside>
-      </div>
+
+      </FormDialog>
     </AppShell>
   );
 }
