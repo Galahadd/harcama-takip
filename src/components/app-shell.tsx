@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { sessionFetch } from "@/lib/session-fetch";
 import { useAppearance } from "@/lib/use-appearance";
+import { WorkspaceBackground } from "@/components/workspace-background";
 import { ChevronRight, CircleHelp, Landmark, LogOut, Moon, Pause, Play, Settings, ShieldCheck, Sun, WalletCards } from "lucide-react";
 
 const navigation = [
@@ -38,6 +39,7 @@ export function AppShell({ children, title, description, actions }: {
   const initial = username ? username.charAt(0).toLocaleUpperCase("tr-TR") : "H";
   return (
     <div className="workspace" data-theme={dark ? "dark" : "light"} data-motion={paused ? "paused" : "running"}>
+      <WorkspaceBackground paused={paused} />
       <a href="#main-content" className="skip-link">İçeriğe geç</a>
       <aside className="desktop-sidebar">
         <Link href="/" className="brand"><span className="brand-icon"><WalletCards size={22} aria-hidden="true" /></span><span>Hesabım<small>Kişisel finans</small></span></Link>
@@ -67,7 +69,7 @@ export function AppShell({ children, title, description, actions }: {
           </div>
         </header>
         <main id="main-content" className="shell-content">
-          <div className="page-heading"><div className="heading-ambient" aria-hidden="true" /><div className="heading-copy"><p className="page-eyebrow">FİNANS KONTROL PANELİ</p><h1>{title}</h1><p>{description}</p></div><div className="page-actions">{actions}</div></div>
+          <div className="page-heading"><div className="heading-copy"><p className="page-eyebrow">FİNANS KONTROL PANELİ</p><h1>{title}</h1><p>{description}</p></div><div className="page-actions">{actions}</div></div>
           {logoutError ? <p className="notice error" role="alert">Çıkış yapılamadı. Lütfen tekrar dene.</p> : null}
           {children}
           <footer className="shell-footer"><span>Hesabım <span className="footer-dot">·</span> Kişisel finans</span><span><CircleHelp size={13} aria-hidden="true" /> Tutarlar Türk lirası cinsindendir.</span></footer>

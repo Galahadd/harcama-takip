@@ -9,12 +9,12 @@ Existing API contracts, ownership boundaries, parsing and financial calculations
 
 - UI/UX Pro Max: Minimalism & Swiss Style and Data-Dense Dashboard recommendations; readable values, visible filters, keyboard navigation, reduced motion and explicit empty/loading/error states.
 - [AdminCN — Shadcn Admin Dashboard Template](https://21st.dev/community/templates/admincn-shadcn-admin-dashboard-template): listed with price 0 in the 21st MCP catalog. The public preview was reviewed. Source download on 21st is paid; no gated source was retrieved or copied. Original components implement the dashboard layout direction using the project's existing dependencies.
-- MotionSites: no callable MotionSites MCP tools were available in this session, and plugin discovery returned no matching integration. The official backgrounds gallery was inspected, but an appropriate freely usable background could not be verified. The ambient header is original local CSS, not a downloaded MotionSites asset.
+- [MotionSites AI Runtime](https://motionsites.ai/?prompt=ai-runtime): the user-selected free prompt was retrieved through the connected plugin. Only its exact hosted background video is used; its landing-page copy, statistics, fonts and navigation are not imported.
 
 ## Visual decisions
 
 - Fixed deep-navy sidebar on desktop; three labeled bottom navigation destinations on mobile.
-- Light neutral canvas with white panels; coordinated dark palette.
+- Full-viewport AI Runtime video canvas, a dark contrast scrim, white page headings and opaque white data panels; coordinated dark panels when dark mode is selected. Navigation and financial data keep their existing layout and typography.
 - Violet primary actions and featured totals connect the app to the existing login.
 - Green/red indicate financial gain/loss with numeric signs and labels. Gold is reserved for gold assets and installment metadata.
 - Plus Jakarta Sans with system fallback; tabular numbers for values and table cells.
@@ -33,7 +33,7 @@ Existing API contracts, ownership boundaries, parsing and financial calculations
 
 ## Motion and accessibility
 
-- Only the page-heading ambient gradient moves continuously. It uses transform, supports a persistent pause preference, and stops under `prefers-reduced-motion`.
+- Only the decorative AI Runtime video moves continuously. The existing persistent motion preference pauses playback; reduced motion and hidden tabs also pause it. A static CSS backdrop remains if the media cannot load or autoplay is blocked. No video autoplay attribute is used, so accessibility preferences are checked before playback.
 - No chart entrance animation. Loading placeholders reserve chart/table space.
 - Inputs have visible labels; icon controls have names; tables have captions and scrollable named regions.
 - Native dialogs trap focus, close on Escape, and restore focus to their triggers.

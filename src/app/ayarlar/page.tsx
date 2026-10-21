@@ -70,7 +70,7 @@ export default function SettingsPage() {
               <div className="appearance-options" role="group" aria-label="Tema tercihi">
                 {[false,true].map((isDark) => <button className="appearance-option" key={String(isDark)} aria-pressed={dark === isDark} onClick={() => setTheme(isDark)}><span className={"appearance-preview " + (isDark ? "dark" : "")} aria-hidden="true"><i /><div><b /><b /><b /></div></span><span><span className="flex items-center gap-2">{isDark ? <Moon size={14} /> : <Sun size={14} />}{isDark ? "Koyu tema" : "Açık tema"}</span>{dark === isDark ? <Check size={15} /> : null}</span></button>)}
               </div>
-              <div className="preference-row"><div><p>Arka plan hareketi</p><small>Başlık alanındaki hafif animasyonu aç veya kapat.</small></div><button className="preference-toggle" role="switch" aria-label="Arka plan hareketi" aria-checked={!paused} onClick={() => setMotion(!paused)}><span /></button></div>
+              <div className="preference-row"><div><p>Arka plan hareketi</p><small>Arka plan videosunu oynat veya durdur. Cihazın hareketi azalt ayarına uyulur.</small></div><button className="preference-toggle" role="switch" aria-label="Arka plan hareketi" aria-checked={!paused} onClick={() => setMotion(!paused)}><span /></button></div>
             </div>
           </section>
         </div>
