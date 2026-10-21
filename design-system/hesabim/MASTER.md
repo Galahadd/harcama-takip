@@ -13,7 +13,7 @@ Existing API contracts, ownership boundaries, parsing and financial calculations
 
 ## Visual decisions
 
-- Fixed deep-navy sidebar on desktop; three labeled bottom navigation destinations on mobile.
+- Fixed translucent deep-navy sidebar on desktop; matching glass header and three labeled bottom navigation destinations on mobile. The web interpretation of Liquid Glass is limited to navigation: 12% dark tint over the existing video scrim, 6px backdrop blur with 130% saturation, a subtle static reflection and inset edge highlights. Light text and violet active/focus states stay visible in both themes; data cards remain opaque. Browsers without backdrop blur and reduced-transparency preferences use a 90% dark fallback without reflections. No new animation or optical distortion is introduced. The content footer remains transparent.
 - Full-viewport AI Runtime video canvas, a dark contrast scrim, white page headings and opaque white data panels; coordinated dark panels when dark mode is selected. Navigation and financial data keep their existing layout and typography.
 - Violet primary actions and featured totals connect the app to the existing login.
 - Green/red indicate financial gain/loss with numeric signs and labels. Gold is reserved for gold assets and installment metadata.
