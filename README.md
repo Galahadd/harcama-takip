@@ -15,6 +15,8 @@ Kisisel kullanim icin tasarlanmis Next.js uygulamasi. Garanti BBVA kredi karti e
 
 ## Kurulum
 
+Codex Cloud'da repository skill'lerini kullanmak ve 21st/MotionSites bağlantılarını hazırlamak için [Cloud kurulum notlarına](docs/CODEX_CLOUD.md) bakın. Yerel hazırlığı `python3 scripts/check-codex-cloud.py` ile kontrol edebilirsiniz. Bu kontrol MCP bağlantılarını etkinleştirmez veya sırları aktarmaz.
+
 ```bash
 npm install
 cp .env.example .env.local

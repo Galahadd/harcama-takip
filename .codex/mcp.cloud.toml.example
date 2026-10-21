@@ -1,0 +1,22 @@
+# Portable connection definitions, NOT an automatically activated Cloud config.
+# Merge into the effective MCP config only on a host that supports it.
+# Never copy the local user's config.toml or inline credential values.
+
+[mcp_servers."21st"]
+url = "https://21st.dev/api/mcp"
+env_http_headers = { "x-api-key" = "TWENTY_FIRST_API_KEY" }
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+default_tools_approval_mode = "prompt"
+# Read-only discovery and design retrieval; no publishing/account mutations.
+enabled_tools = ["search", "get_inspiration", "get_component", "get_theme", "get_usage"]
+
+[mcp_servers.motionsites]
+# Same HTTPS endpoint used by the local mcp-remote bridge; no local Node bridge required.
+url = "https://xgdzyqfalbibzelpdpvr.supabase.co/functions/v1/mcp"
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+default_tools_approval_mode = "prompt"
+# Authentication/transport compatibility must be checked in the target task.
