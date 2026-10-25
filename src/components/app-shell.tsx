@@ -8,6 +8,8 @@ import { useAppearance } from "@/lib/use-appearance";
 import { WorkspaceBackground } from "@/components/workspace-background";
 import { ChevronRight, CircleHelp, Landmark, LogOut, Moon, Pause, Play, Settings, ShieldCheck, Sun, WalletCards } from "lucide-react";
 
+import appVersion from "@/lib/app-version.json";
+
 const navigation = [
   { href: "/", label: "Harcamalar", icon: WalletCards, detail: "Harcama & ekstre" },
   { href: "/yatirimlar", label: "Yatırımlar", icon: Landmark, detail: "Altın portföyü" },
@@ -72,7 +74,7 @@ export function AppShell({ children, title, description, actions }: {
           <div className="page-heading"><div className="heading-copy"><p className="page-eyebrow">FİNANS KONTROL PANELİ</p><h1>{title}</h1><p>{description}</p></div><div className="page-actions">{actions}</div></div>
           {logoutError ? <p className="notice error" role="alert">Çıkış yapılamadı. Lütfen tekrar dene.</p> : null}
           {children}
-          <footer className="shell-footer"><span>Hesabım <span className="footer-dot">·</span> Kişisel finans</span><span><CircleHelp size={13} aria-hidden="true" /> Tutarlar Türk lirası cinsindendir.</span></footer>
+          <footer className="shell-footer"><span>Hesabım <span className="footer-dot">·</span> Kişisel finans <span className="footer-dot">·</span> Sürüm {appVersion.version}</span><span><CircleHelp size={13} aria-hidden="true" /> Tutarlar Türk lirası cinsindendir.</span></footer>
         </main>
       </div>
       <nav className="mobile-bottom-nav" aria-label="Mobil ana menü">{navigation.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined} className={pathname === href ? "is-active" : ""}><Icon size={20} aria-hidden="true" /><span>{label}</span></Link>)}</nav>

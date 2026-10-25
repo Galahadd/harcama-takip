@@ -56,3 +56,15 @@ Oturumlar kullanici adini iceren imzali bir cookie ile korunur. Deploy etmeden o
 - PDF parser metin secilebilir PDF'ler icindir; OCR yoktur. Tarayicidan `Print to PDF` ile uretilen ve metin katmani olmayan Yapi Kredi dosyalari yerine Yapi Kredi Excel hesap ozeti (`.xls`/`.xlsx`) kullanilabilir.
 - Desteklenen ilk banka formatlari Garanti BBVA ve Yapi Kredi'dir. Gercek ekstrede satir yapisi farkliysa `src/lib/pdf.ts` icindeki parser uyarlanmalidir.
 - Taksitli harcamalar ekstrede gorunen aylik tutar kadar kaydedilir.
+
+### Uygulama sürümü
+
+Sayfa altındaki sürüm `src/lib/app-version.json` dosyasından okunur. İlk sürüm
+`1.1` olur; her yerel commit öncesinde `.githooks/pre-commit` sürümü artırıp aynı
+commit'e ekler: `1.8 → 1.9 → 2.0 → 2.1`. Hesaplama HEAD'deki sürümden yapılır;
+başarısız commit'i tekrar denemek fazladan artış yapmaz. Amend de sürümü artırır.
+
+`npm install` hook'u otomatik kurar. Bağımlılık kurmadan çalışıyorsanız
+`node scripts/setup-git-hooks.mjs` komutunu bir kez çalıştırın. GitHub web arayüzü,
+`--no-verify` veya hook kurulmamış bir makinedeki commit'ler bu yerel hook'u
+çalıştırmaz. Sürümün sitede görünmesi için ilgili commit'in deploy edilmesi gerekir.
