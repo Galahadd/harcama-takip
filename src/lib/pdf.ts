@@ -256,11 +256,48 @@ function buildYapiExpense(
   } satisfies ParsedExpense;
 }
 
+// Older Bonus statements use Turkish month names and unsigned debit amounts.
+function parseBonusStatement(text: string, rules: Pick<CategoryRule, "pattern" | "category">[]) {
+  const months = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+  const datePattern = new RegExp(`^(\\d{2})\\s*(${months.join("|")})\\s*(\\d{4})(.*)$`, "iu");
+  const rows: ParsedExpense[] = [];
+  for (const line of compactLines(text)) {
+    const match = line.match(datePattern);
+    if (!match) continue;
+    const [, day, monthName, year, body] = match;
+    // Payments/refunds have a trailing plus; bonus movements have no debit.
+    if (/BONUS|ÖDEMENİZ|DEVİR|FAİZ|VERGİ/iu.test(body)) continue;
+    const amountMatch = body.match(/(\d{1,3}(?:\.\d{3})*,\d{2})\s*([+-]?)\s*$/);
+    if (!amountMatch || amountMatch[2]) continue;
+    const amount = parseTurkishAmount(amountMatch[1]);
+    if (amount <= 0) continue;
+    const raw = body.slice(0, amountMatch.index);
+    const installmentMatch = raw.match(/(\d{1,3}(?:\.\d{3})*,\d{2})\s*x\s*(\d+)\s*=\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(\d+)\.\s*Taksit/iu);
+    const description = cleanDescription(raw
+      .replace(/\d{1,3}(?:\.\d{3})*,\d{2}\s*x\s*\d+\s*=\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*\d+\.\s*Taksit/giu, " ")
+      .replace(/\d{1,3}(?:\.\d{3})*,\d{2}\s*(?:TL)?\s*$/iu, " "));
+    if (!description) continue;
+    const categoryResult = categorizeDescription(description, rules);
+    const date = toIsoDate(day, String(months.findIndex(m => m.toLocaleLowerCase("tr-TR") === monthName.toLocaleLowerCase("tr-TR")) + 1), year);
+    rows.push({ date, description, amount, category: categoryResult.category,
+      suggestedCategory: categoryResult.category, matchedRule: categoryResult.matchedRule,
+      hashSeed: `${date}|${description}|${amount.toFixed(2)}`,
+      installmentCurrent: installmentMatch ? Number(installmentMatch[4]) : null,
+      installmentTotal: installmentMatch ? Number(installmentMatch[2]) : null,
+      installmentOriginalAmount: installmentMatch ? parseTurkishAmount(installmentMatch[3]) : null,
+    });
+  }
+  return rows;
+}
+
 export function parseStatementText(
   text: string,
   rules: Pick<CategoryRule, "pattern" | "category">[],
   bank: Bank | "all" = "unknown",
 ): ParsedExpense[] {
+  if (/Bonus Trink|BONUS PROGRAM ORTAKLARI/iu.test(text)) {
+    return parseBonusStatement(text, rules);
+  }
   const lines = compactLines(text);
   const isGaranti = bank === "garanti" || text.includes("Garanti") || text.includes("BONUS PLATINUM");
   const isYapiKredi = bank === "yapikredi" || text.includes("Yapı ve Kredi") || text.includes("yapikredi");
